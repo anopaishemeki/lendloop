@@ -360,7 +360,7 @@ describe("views", () => {
 });
 
 describe("activity", () => {
-  test("shows automation outcomes to the loan's parties", async () => {
+  test("shows automation outcomes to the loan's parties only", async () => {
     const s = await setup();
     const loanId = await seedLoan(s, {
       endDate: day(-1),
@@ -373,7 +373,7 @@ describe("activity", () => {
         event: "request.approved",
         loanId,
         recipientId: s.borrower.userId,
-        sentAt: Date.now() - 60_000,
+        sentAt: Date.now(),
         status: "sent",
       });
       await ctx.db.insert("reminders", {
@@ -382,24 +382,24 @@ describe("activity", () => {
         loanId,
         reminderDate: today,
         status: "failed",
+        updatedAt: Date.now(),
       });
     });
 
-    const [mine] = (await s.borrower.caller.query(api.loans.listMyRequests, {}))
-      .active;
-    expect(
-      mine?.activity.map(({ kind, status, toViewer }) => ({
-        kind,
-        status,
-        toViewer,
-      }))
-    ).toEqual([
+    const mine = await s.borrower.caller.query(api.loans.activity, { loanId });
+    expect(mine).toMatchObject([
       { kind: "overdue.reminder", status: "failed", toViewer: true },
       { kind: "request.approved", status: "sent", toViewer: true },
     ]);
-    const [incoming] = (await s.owner.caller.query(api.loans.listIncoming, {}))
-      .active;
-    expect(incoming?.activity.every((item) => !item.toViewer)).toBe(true);
-    expect(JSON.stringify(incoming)).not.toContain("Resend 503");
+    const owners = await s.owner.caller.query(api.loans.activity, { loanId });
+    expect(owners.every((item) => !item.toViewer)).toBe(true);
+    expect(JSON.stringify(owners)).not.toContain("Resend 503");
+
+    await expect(
+      s.other.caller.query(api.loans.activity, { loanId })
+    ).rejects.toThrow(/not part of this loan/u);
+    await expect(
+      s.admin.caller.query(api.loans.activity, { loanId })
+    ).resolves.toHaveLength(2);
   });
 });
