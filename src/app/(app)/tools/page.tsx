@@ -37,7 +37,11 @@ function ToolBrowser() {
       <ToolGrid
         actions={(tool) =>
           tool.isMine ? null : (
-            <RequestDialog toolId={tool._id} toolName={tool.name} />
+            <RequestDialog
+              category={tool.category}
+              toolId={tool._id}
+              toolName={tool.name}
+            />
           )
         }
         emptyAction={<ListToolButton />}
