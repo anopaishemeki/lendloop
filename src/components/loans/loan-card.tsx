@@ -12,14 +12,14 @@ import type { LoanView } from "./types";
 function DateStub({ date }: { date: string }) {
   const day = parseISO(date);
   return (
-    <div className="flex w-16 shrink-0 flex-col items-center justify-center rounded-xl border bg-background py-2 text-center">
-      <span className="font-medium text-[0.65rem] text-terracotta uppercase tracking-widest">
+    <div className="bg-background flex w-16 shrink-0 flex-col items-center justify-center rounded-xl border py-2 text-center">
+      <span className="text-terracotta text-[0.65rem] font-medium tracking-widest uppercase">
         {format(day, "MMM")}
       </span>
-      <span className="font-semibold font-serif text-2xl leading-none">
+      <span className="font-serif text-2xl leading-none font-semibold">
         {format(day, "d")}
       </span>
-      <span className="text-[0.65rem] text-muted-foreground">
+      <span className="text-muted-foreground text-[0.65rem]">
         {format(day, "EEE")}
       </span>
     </div>
@@ -36,7 +36,7 @@ export function LoanCard({ loan }: { loan: LoanView }) {
   return (
     <li
       className={cn(
-        "flex flex-col gap-4 rounded-2xl border bg-card p-4 shadow-xs sm:flex-row sm:items-start sm:p-5",
+        "bg-card flex flex-col gap-4 rounded-2xl border p-4 shadow-xs sm:flex-row sm:items-start sm:p-5",
         loan.isOverdue && "border-destructive/40"
       )}
     >
@@ -44,7 +44,7 @@ export function LoanCard({ loan }: { loan: LoanView }) {
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <CategoryIcon category={loan.tool.category} size="sm" />
-          <h3 className="font-semibold text-lg leading-tight">
+          <h3 className="text-lg leading-tight font-semibold">
             {loan.tool.name}
           </h3>
           <LoanStatusBadge isOverdue={loan.isOverdue} status={loan.status} />

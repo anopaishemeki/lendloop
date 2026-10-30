@@ -47,6 +47,7 @@ export function ProfileGate({ children }: { children: ReactNode }) {
       aria-busy="true"
       aria-label="Loading your neighborhood board"
       className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6"
+      role="status"
     >
       <Skeleton className="h-10 w-64" />
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">

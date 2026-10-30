@@ -22,7 +22,7 @@ function Chip({
     <button
       aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 font-medium text-sm transition-colors",
+        "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
         active
           ? "border-primary bg-primary text-primary-foreground"
           : "bg-card text-muted-foreground hover:border-foreground/20 hover:text-foreground"

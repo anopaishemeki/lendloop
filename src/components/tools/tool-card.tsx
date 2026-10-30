@@ -14,13 +14,13 @@ export function ToolCard({
   actions?: ReactNode;
 }) {
   return (
-    <article className="group flex flex-col rounded-2xl border bg-card p-5 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+    <article className="group bg-card flex flex-col rounded-2xl border p-5 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
         <CategoryIcon category={tool.category} />
         <AvailabilityBadge availability={tool.availability} />
       </div>
-      <h3 className="mt-4 font-semibold text-xl leading-snug">{tool.name}</h3>
-      <p className="mt-1 text-muted-foreground text-sm">
+      <h3 className="mt-4 text-xl leading-snug font-semibold">{tool.name}</h3>
+      <p className="text-muted-foreground mt-1 text-sm">
         {CATEGORY_LABELS[tool.category]}
         <span aria-hidden className="mx-1.5">
           ·
@@ -34,7 +34,7 @@ export function ToolCard({
       ) : null}
       <div className="mt-auto pt-4">
         {tool.isMine ? (
-          <span className="inline-flex rounded-full bg-muted px-2.5 py-1 font-medium text-muted-foreground text-xs">
+          <span className="bg-muted text-muted-foreground inline-flex rounded-full px-2.5 py-1 text-xs font-medium">
             Your listing
           </span>
         ) : (

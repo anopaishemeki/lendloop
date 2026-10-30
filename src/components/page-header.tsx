@@ -15,13 +15,13 @@ export function PageHeader({
     <div className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b pb-6">
       <div className="space-y-1.5">
         {eyebrow ? (
-          <p className="font-medium text-terracotta text-xs uppercase tracking-[0.18em]">
+          <p className="text-terracotta text-xs font-medium tracking-[0.18em] uppercase">
             {eyebrow}
           </p>
         ) : null}
-        <h1 className="font-semibold text-3xl sm:text-4xl">{title}</h1>
+        <h1 className="text-3xl font-semibold sm:text-4xl">{title}</h1>
         {description ? (
-          <p className="max-w-2xl text-muted-foreground">{description}</p>
+          <p className="text-muted-foreground max-w-2xl">{description}</p>
         ) : null}
       </div>
       {action}

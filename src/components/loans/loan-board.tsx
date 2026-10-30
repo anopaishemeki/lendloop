@@ -1,5 +1,5 @@
 import type { FunctionReturnType } from "convex/server";
-import { CalendarCheck, Hourglass, History } from "lucide-react";
+import { CalendarCheck, History, Hourglass } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { api } from "../../../convex/_generated/api";
 import { LoanSection } from "./loan-section";

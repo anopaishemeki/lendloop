@@ -11,10 +11,10 @@ export function Neighbor({
   isTrustedLender: boolean;
 }) {
   return (
-    <span className="inline-flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
+    <span className="text-muted-foreground inline-flex flex-wrap items-center gap-2 text-sm">
       <span
         aria-hidden
-        className="inline-flex size-6 items-center justify-center rounded-full bg-accent font-semibold text-accent-foreground text-xs"
+        className="bg-accent text-accent-foreground inline-flex size-6 items-center justify-center rounded-full text-xs font-semibold"
       >
         {firstName.charAt(0).toUpperCase()}
       </span>

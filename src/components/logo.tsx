@@ -15,10 +15,10 @@ export function Logo({
       className={cn("group inline-flex items-center gap-2", className)}
       href={href}
     >
-      <span className="inline-flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition-transform group-hover:rotate-12">
+      <span className="bg-primary text-primary-foreground inline-flex size-8 items-center justify-center rounded-lg shadow-sm transition-transform group-hover:rotate-12">
         <Repeat aria-hidden className="size-4" />
       </span>
-      <span className="font-semibold font-serif text-xl tracking-tight">
+      <span className="font-serif text-xl font-semibold tracking-tight">
         LendLoop
       </span>
     </Link>

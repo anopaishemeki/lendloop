@@ -4,14 +4,11 @@ import {
   Hammer,
   type LucideIcon,
   Package,
-  Sprout,
   SprayCan,
+  Sprout,
   Tent,
 } from "lucide-react";
-import type {
-  ToolCategory,
-  ToolCondition,
-} from "../../convex/lib/validators";
+import type { ToolCategory, ToolCondition } from "../../convex/lib/validators";
 
 export const CATEGORY_LABELS: Record<ToolCategory, string> = {
   camping: "Camping",

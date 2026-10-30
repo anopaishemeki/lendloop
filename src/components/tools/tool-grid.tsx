@@ -36,7 +36,7 @@ export function ToolGrid({
   if (tools.length === 0) {
     return (
       <EmptyState icon={emptyIcon} title={emptyTitle}>
-        <p className="max-w-sm text-muted-foreground text-sm">{emptyHint}</p>
+        <p className="text-muted-foreground max-w-sm text-sm">{emptyHint}</p>
         {emptyAction}
       </EmptyState>
     );

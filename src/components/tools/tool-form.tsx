@@ -56,12 +56,12 @@ function ChoiceGroup<T extends string>({
 }) {
   return (
     <fieldset className="grid gap-2">
-      <legend className="mb-2 font-medium text-sm">{legend}</legend>
+      <legend className="mb-2 text-sm font-medium">{legend}</legend>
       <div className={className}>
         {options.map((option) => (
           <label
             className={cn(
-              "flex cursor-pointer items-center gap-2 rounded-xl border bg-card px-3 py-2.5 text-sm transition-colors has-focus-visible:ring-[3px] has-focus-visible:ring-ring/50",
+              "bg-card has-focus-visible:ring-ring/50 flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-colors has-focus-visible:ring-[3px]",
               option === value
                 ? "border-primary bg-secondary text-secondary-foreground"
                 : "hover:border-foreground/25"
@@ -116,7 +116,7 @@ export function ToolForm({
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <form
-        className="grid gap-7 rounded-2xl border bg-card p-6 shadow-xs sm:p-8"
+        className="bg-card grid gap-7 rounded-2xl border p-6 shadow-xs sm:p-8"
         onSubmit={handleSubmit}
       >
         <div className="grid gap-2">
@@ -189,7 +189,7 @@ export function ToolForm({
       </form>
 
       <aside aria-label="Preview" className="space-y-3">
-        <p className="font-medium text-muted-foreground text-xs uppercase tracking-[0.18em]">
+        <p className="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
           How neighbors will see it
         </p>
         <ToolCard

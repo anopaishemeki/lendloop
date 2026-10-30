@@ -6,7 +6,10 @@ const STYLES: Record<LoanStatus, { label: string; className: string }> = {
     className: "bg-secondary text-secondary-foreground",
     label: "Approved",
   },
-  cancelled: { className: "bg-muted text-muted-foreground", label: "Cancelled" },
+  cancelled: {
+    className: "bg-muted text-muted-foreground",
+    label: "Cancelled",
+  },
   declined: { className: "bg-muted text-muted-foreground", label: "Declined" },
   requested: {
     className: "bg-warning/18 text-accent-foreground",
@@ -28,7 +31,7 @@ export function LoanStatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 font-medium text-xs",
+        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
         className
       )}
     >

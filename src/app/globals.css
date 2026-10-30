@@ -93,14 +93,14 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground antialiased;
     font-feature-settings: "ss01", "cv11";
+    @apply bg-background text-foreground antialiased;
   }
   h1,
   h2,
   h3 {
-    @apply font-serif tracking-tight;
     font-optical-sizing: auto;
+    @apply font-serif tracking-tight;
   }
 }
 

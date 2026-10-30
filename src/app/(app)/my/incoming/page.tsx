@@ -20,8 +20,8 @@ export default function IncomingRequestsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Lending"
         description="Neighbors asking to borrow your tools. Approve, decline, and mark things returned when they come back."
+        eyebrow="Lending"
         title="Incoming requests"
       />
       <LoanBoard board={board} copy={COPY} />

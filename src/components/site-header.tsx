@@ -55,8 +55,9 @@ function NavLinks({ items }: { items: NavItem[] }) {
           <Link
             aria-current={active ? "page" : undefined}
             className={cn(
-              "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground",
-              active && "bg-secondary text-secondary-foreground hover:bg-secondary"
+              "text-muted-foreground hover:bg-muted hover:text-foreground inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
+              active &&
+                "bg-secondary text-secondary-foreground hover:bg-secondary"
             )}
             href={href}
             key={href}
@@ -75,7 +76,7 @@ export function SiteHeader() {
   const items = me?.isAdmin ? [...NAV, ADMIN_NAV] : NAV;
 
   return (
-    <header className="sticky top-0 z-20 border-b bg-background/85 backdrop-blur-md">
+    <header className="bg-background/85 sticky top-0 z-20 border-b backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6">
         <Logo href="/tools" />
         <nav
@@ -86,7 +87,7 @@ export function SiteHeader() {
         </nav>
         <div className="ml-auto flex items-center gap-3">
           {me ? (
-            <span className="hidden text-muted-foreground text-sm lg:inline">
+            <span className="text-muted-foreground hidden text-sm lg:inline">
               Hi, {me.name.split(" ")[0]}
             </span>
           ) : null}

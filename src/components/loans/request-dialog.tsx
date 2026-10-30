@@ -37,15 +37,15 @@ function BookedDates({ toolId }: { toolId: Id<"tools"> }) {
   const booked = useQuery(api.loans.bookedRanges, { toolId });
   if (!booked?.length) return null;
   return (
-    <div className="rounded-xl border bg-muted/60 px-4 py-3 text-sm">
+    <div className="bg-muted/60 rounded-xl border px-4 py-3 text-sm">
       <p className="flex items-center gap-1.5 font-medium">
-        <CalendarClock aria-hidden className="size-4 text-terracotta" />
+        <CalendarClock aria-hidden className="text-terracotta size-4" />
         Already booked
       </p>
       <ul className="mt-2 flex flex-wrap gap-1.5">
         {booked.map((range) => (
           <li
-            className="rounded-full border bg-card px-2.5 py-0.5 text-muted-foreground text-xs"
+            className="bg-card text-muted-foreground rounded-full border px-2.5 py-0.5 text-xs"
             key={range.startDate}
           >
             {formatRange(range.startDate, range.endDate)}
@@ -113,7 +113,7 @@ export function RequestDialog({
           <DialogHeader className="flex-row items-center gap-3 text-left">
             <CategoryIcon category={category} />
             <div className="space-y-1">
-              <DialogTitle className="font-semibold font-serif text-2xl">
+              <DialogTitle className="font-serif text-2xl font-semibold">
                 Borrow the {toolName}
               </DialogTitle>
               <DialogDescription>
@@ -160,7 +160,9 @@ export function RequestDialog({
           </div>
           <DialogFooter className="items-center sm:justify-between">
             <p className="text-muted-foreground text-sm" role="status">
-              {days ? `${days === 1 ? "1 day" : `${days} days`} requested` : null}
+              {days
+                ? `${days === 1 ? "1 day" : `${days} days`} requested`
+                : null}
             </p>
             <Button disabled={pending} type="submit">
               {pending ? "Sending…" : "Send request"}
