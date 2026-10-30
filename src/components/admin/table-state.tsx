@@ -26,7 +26,7 @@ export function TableState<T>({
   if (results.length === 0) return <EmptyState title={empty} />;
   return (
     <div className="space-y-3">
-      <div className="bg-card rounded-lg border">
+      <div className="bg-card overflow-hidden rounded-2xl border shadow-xs">
         <Table>{children(results)}</Table>
       </div>
       {status === "CanLoadMore" || status === "LoadingMore" ? (

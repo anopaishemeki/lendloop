@@ -1,6 +1,7 @@
 "use client";
 
 import { usePaginatedQuery } from "convex/react";
+import { CategoryIcon } from "@/components/category-icon";
 import { AvailabilityBadge } from "@/components/tools/availability-badge";
 import { RemoveToolButton } from "@/components/tools/remove-tool-button";
 import {
@@ -37,7 +38,12 @@ export function AdminTools() {
           <TableBody>
             {rows.map((tool) => (
               <TableRow key={tool._id}>
-                <TableCell className="font-medium">{tool.name}</TableCell>
+                <TableCell className="font-medium">
+                  <span className="flex items-center gap-2.5">
+                    <CategoryIcon category={tool.category} size="sm" />
+                    {tool.name}
+                  </span>
+                </TableCell>
                 <TableCell>{CATEGORY_LABELS[tool.category]}</TableCell>
                 <TableCell>{tool.ownerName}</TableCell>
                 <TableCell>
