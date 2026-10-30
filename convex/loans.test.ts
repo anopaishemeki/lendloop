@@ -358,3 +358,48 @@ describe("views", () => {
     ).toEqual([{ endDate: day(5), startDate: day(3) }]);
   });
 });
+
+describe("activity", () => {
+  test("shows automation outcomes to the loan's parties", async () => {
+    const s = await setup();
+    const loanId = await seedLoan(s, {
+      endDate: day(-1),
+      startDate: day(-3),
+      status: "approved",
+    });
+    await s.t.run(async (ctx) => {
+      await ctx.db.insert("notificationOutbox", {
+        attempts: 1,
+        event: "request.approved",
+        loanId,
+        recipientId: s.borrower.userId,
+        sentAt: Date.now() - 60_000,
+        status: "sent",
+      });
+      await ctx.db.insert("reminders", {
+        error: "Resend 503",
+        idempotencyKey: `${loanId}:${today}`,
+        loanId,
+        reminderDate: today,
+        status: "failed",
+      });
+    });
+
+    const [mine] = (await s.borrower.caller.query(api.loans.listMyRequests, {}))
+      .active;
+    expect(
+      mine?.activity.map(({ kind, status, toViewer }) => ({
+        kind,
+        status,
+        toViewer,
+      }))
+    ).toEqual([
+      { kind: "overdue.reminder", status: "failed", toViewer: true },
+      { kind: "request.approved", status: "sent", toViewer: true },
+    ]);
+    const [incoming] = (await s.owner.caller.query(api.loans.listIncoming, {}))
+      .active;
+    expect(incoming?.activity.every((item) => !item.toViewer)).toBe(true);
+    expect(JSON.stringify(incoming)).not.toContain("Resend 503");
+  });
+});
