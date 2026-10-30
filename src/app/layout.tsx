@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 import { Providers } from "@/components/providers";
-import { ConvexClientProvider } from "./convex-client-provider";
 import "./globals.css";
 
 const geistSans = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
@@ -22,9 +21,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans`}>
         <ClerkProvider>
-          <ConvexClientProvider>
-            <Providers>{children}</Providers>
-          </ConvexClientProvider>
+          <Providers>{children}</Providers>
         </ClerkProvider>
       </body>
     </html>
