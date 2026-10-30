@@ -13,30 +13,31 @@ import { errorMessage } from "@/lib/errors";
 import { api } from "../../../../../../convex/_generated/api";
 import type { Id } from "../../../../../../convex/_generated/dataModel";
 
+const BACK = "/my/listings";
+
 export default function EditToolPage() {
   const router = useRouter();
   const { toolId } = useParams<{ toolId: Id<"tools"> }>();
-  const mine = useQuery(api.tools.listMine);
+  const tool = useQuery(api.tools.get, { toolId });
   const update = useMutation(api.tools.update);
-  const tool = mine?.find((item) => item._id === toolId);
 
   const handleSubmit = async (values: ToolFormValues) => {
     try {
       await update({ ...values, toolId });
       toast.success("Listing updated");
-      router.push("/my/listings");
+      router.push(BACK);
     } catch (error) {
       toast.error(errorMessage(error));
     }
   };
 
-  if (mine === undefined) return <Skeleton className="h-80 max-w-xl" />;
+  if (tool === undefined) return <Skeleton className="h-80 max-w-xl" />;
 
-  if (!tool) {
+  if (!tool.isMine) {
     return (
       <EmptyState title="You can only edit your own listings">
         <Button asChild variant="outline">
-          <Link href="/my/listings">Back to my listings</Link>
+          <Link href={BACK}>Back to my listings</Link>
         </Button>
       </EmptyState>
     );
@@ -52,7 +53,7 @@ export default function EditToolPage() {
           description: tool.description,
           name: tool.name,
         }}
-        onCancel={() => router.back()}
+        onCancel={() => router.push(BACK)}
         onSubmit={handleSubmit}
         submitLabel="Save changes"
       />

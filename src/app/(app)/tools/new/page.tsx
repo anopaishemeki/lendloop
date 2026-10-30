@@ -29,7 +29,7 @@ export default function NewToolPage() {
         title="List a tool"
       />
       <ToolForm
-        onCancel={() => router.back()}
+        onCancel={() => router.push("/my/listings")}
         onSubmit={handleSubmit}
         submitLabel="List tool"
       />
