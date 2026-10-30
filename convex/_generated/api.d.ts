@@ -15,6 +15,7 @@ import type * as lib_loans from "../lib/loans.js";
 import type * as lib_roles from "../lib/roles.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_validators from "../lib/validators.js";
+import type * as loans from "../loans.js";
 import type * as tools from "../tools.js";
 import type * as users from "../users.js";
 
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   "lib/roles": typeof lib_roles;
   "lib/text": typeof lib_text;
   "lib/validators": typeof lib_validators;
+  loans: typeof loans;
   tools: typeof tools;
   users: typeof users;
 }>;
