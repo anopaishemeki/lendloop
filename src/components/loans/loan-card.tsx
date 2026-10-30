@@ -36,7 +36,7 @@ export function LoanCard({ loan }: { loan: LoanView }) {
           <p className="text-sm italic">&ldquo;{loan.note}&rdquo;</p>
         ) : null}
         <LoanActivity
-          activity={loan.activity}
+          loanId={loan._id}
           otherName={loan.counterpart.firstName}
         />
       </div>
