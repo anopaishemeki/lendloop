@@ -2,6 +2,7 @@ import { NonRetryableError, vOnCompleteArgs } from "@convex-dev/workpool";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation } from "./_generated/server";
+import { appUrl as appUrlFromEnv } from "./lib/env";
 import { SIGNATURE_HEADER, signRequest, TIMESTAMP_HEADER } from "./lib/hmac";
 import { scheduleDelivery } from "./lib/notifications";
 import { firstName } from "./lib/users";
@@ -10,7 +11,6 @@ import { notificationEventValidator } from "./lib/validators";
 const MAX_ERROR_LENGTH = 500;
 const REDRIVE_LIMIT = 100;
 const FETCH_TIMEOUT_MS = 60_000;
-const TRAILING_SLASHES = /\/+$/u;
 
 /**
  * Exactly what n8n receives: enough to write one email, nothing more. No Clerk
@@ -75,7 +75,7 @@ export const deliver = internalAction({
   handler: async (ctx, { outboxId }) => {
     const url = process.env.N8N_REQUEST_WEBHOOK_URL;
     const secret = process.env.N8N_OUTBOUND_SECRET;
-    const appUrl = process.env.APP_URL?.replace(TRAILING_SLASHES, "");
+    const appUrl = appUrlFromEnv();
     if (!(url && secret && appUrl)) {
       throw new NonRetryableError(
         "N8N_REQUEST_WEBHOOK_URL, N8N_OUTBOUND_SECRET and APP_URL must be set"
