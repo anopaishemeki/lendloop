@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { fail } from "../auth";
+import { isOnLoan } from "./availability";
 import type { DateRange } from "./dates";
 import type { LoanStatus } from "./validators";
 
@@ -37,12 +38,14 @@ export function isOverdue(
  * until it is returned, so its range runs at least through today.
  */
 export function blockedRange(
-  loan: Pick<Doc<"loans">, "startDate" | "endDate">,
+  loan: Pick<Doc<"loans">, "status" | "startDate" | "endDate">,
   today: string
 ): DateRange {
-  const endDate =
-    loan.startDate <= today && loan.endDate < today ? today : loan.endDate;
-  return { endDate, startDate: loan.startDate };
+  const stillOut = isOnLoan(loan, today) && isOverdue(loan, today);
+  return {
+    endDate: stillOut ? today : loan.endDate,
+    startDate: loan.startDate,
+  };
 }
 
 export function canTransition(from: LoanStatus, to: LoanStatus): boolean {
