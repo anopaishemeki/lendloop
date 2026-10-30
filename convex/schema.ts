@@ -52,6 +52,7 @@ export default defineSchema({
     loanId: v.id("loans"),
     reminderDate: v.string(),
     status: reminderStatusValidator,
+    updatedAt: v.number(),
   })
     .index("by_idempotency_key", ["idempotencyKey"])
     .index("by_loan", ["loanId"])
