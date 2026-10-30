@@ -38,6 +38,7 @@ export default defineSchema({
     event: notificationEventValidator,
     lastError: v.optional(v.string()),
     loanId: v.id("loans"),
+    recipientId: v.id("users"),
     sentAt: v.optional(v.number()),
     status: deliveryStatusValidator,
   }).index("by_loan", ["loanId"]),
