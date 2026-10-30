@@ -35,6 +35,7 @@ import { enqueueNotification } from "./lib/notifications";
 import { cleanText } from "./lib/text";
 import { publicProfile } from "./lib/users";
 import {
+  categoryValidator,
   LOAN_MAX_ADVANCE_DAYS,
   LOAN_MAX_DAYS,
   LOAN_NOTE_MAX,
@@ -64,6 +65,7 @@ const loanView = v.object({
   status: loanStatusValidator,
   tool: v.object({
     _id: v.id("tools"),
+    category: categoryValidator,
     isRemoved: v.boolean(),
     name: v.string(),
   }),
@@ -114,6 +116,7 @@ function viewBuilder(ctx: QueryCtx, viewer: Viewer) {
       status: loan.status,
       tool: {
         _id: loan.toolId,
+        category: tool?.category ?? "other",
         isRemoved: tool?.removedAt !== undefined,
         name: tool?.name ?? "Removed tool",
       },
