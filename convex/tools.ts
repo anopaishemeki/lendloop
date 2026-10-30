@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
 import { mutation, type QueryCtx, query } from "./_generated/server";
 import {
   assertToolOwner,
@@ -15,9 +15,10 @@ import {
   isOnLoan,
 } from "./lib/availability";
 import { todayUtc } from "./lib/dates";
+import { cachedGet, getActiveTool } from "./lib/db";
 import { loansForTool, transitionLoan } from "./lib/loans";
 import { cleanText } from "./lib/text";
-import { publicProfile, userLoader } from "./lib/users";
+import { publicProfile } from "./lib/users";
 import {
   categoryValidator,
   conditionValidator,
@@ -67,11 +68,11 @@ function cleanFields(args: { name: string; description: string }) {
 /** Builds card views, loading each owner once per query instead of once per tool. */
 function viewBuilder(ctx: QueryCtx, viewer: Viewer) {
   const today = todayUtc();
-  const ownerOf = userLoader(ctx, viewer.user);
+  const get = cachedGet(ctx, viewer.user);
 
   return async (tool: Doc<"tools">) => {
     const [owner, availability] = await Promise.all([
-      ownerOf(tool.ownerId),
+      get(tool.ownerId),
       availabilityOf(ctx, tool._id, today),
     ]);
     return {
@@ -85,14 +86,6 @@ function viewBuilder(ctx: QueryCtx, viewer: Viewer) {
       owner: publicProfile(owner),
     };
   };
-}
-
-async function getActiveTool(ctx: QueryCtx, toolId: Id<"tools">) {
-  const tool = await ctx.db.get(toolId);
-  if (!tool || tool.removedAt !== undefined) {
-    fail("NOT_FOUND", "That tool is no longer listed.");
-  }
-  return tool;
 }
 
 /**
