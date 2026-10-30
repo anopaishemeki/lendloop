@@ -41,7 +41,9 @@ export default defineSchema({
     recipientId: v.id("users"),
     sentAt: v.optional(v.number()),
     status: deliveryStatusValidator,
-  }).index("by_loan", ["loanId"]),
+  })
+    .index("by_loan", ["loanId"])
+    .index("by_status", ["status"]),
 
   // Overdue reminders written back by n8n; idempotencyKey is unique per loan per day.
   reminders: defineTable({

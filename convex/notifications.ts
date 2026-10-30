@@ -1,50 +1,28 @@
-import {
-  NonRetryableError,
-  vOnCompleteArgs,
-  Workpool,
-} from "@convex-dev/workpool";
+import { NonRetryableError, vOnCompleteArgs } from "@convex-dev/workpool";
 import { v } from "convex/values";
-import { components, internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
-import {
-  internalAction,
-  internalMutation,
-  internalQuery,
-  type MutationCtx,
-} from "./_generated/server";
+import { internal } from "./_generated/api";
+import { internalAction, internalMutation } from "./_generated/server";
 import { SIGNATURE_HEADER, signRequest, TIMESTAMP_HEADER } from "./lib/hmac";
+import { scheduleDelivery } from "./lib/notifications";
 import { firstName } from "./lib/users";
-import {
-  loanStatusValidator,
-  type NotificationEvent,
-  notificationEventValidator,
-} from "./lib/validators";
+import { notificationEventValidator } from "./lib/validators";
 
 const MAX_ERROR_LENGTH = 500;
+const REDRIVE_LIMIT = 100;
+const FETCH_TIMEOUT_MS = 60_000;
 const TRAILING_SLASHES = /\/+$/u;
-
-export const notificationPool = new Workpool(components.notificationPool, {
-  defaultRetryBehavior: { base: 2, initialBackoffMs: 2000, maxAttempts: 5 },
-  maxParallelism: 5,
-  // deliver is safe to retry: n8n de-duplicates on eventId.
-  retryActionsByDefault: true,
-});
 
 /**
  * Exactly what n8n receives: enough to write one email, nothing more. No Clerk
- * or Convex user ids, no description or notes, and only the recipient's own
- * email address; the other party appears by first name.
+ * or Convex user ids, no description, notes or loan status, and only the
+ * recipient's own email address; the other party appears by first name.
  */
 const payloadValidator = v.object({
   appUrl: v.string(),
   counterpartFirstName: v.string(),
   event: notificationEventValidator,
   eventId: v.string(),
-  loan: v.object({
-    endDate: v.string(),
-    startDate: v.string(),
-    status: loanStatusValidator,
-  }),
+  loan: v.object({ endDate: v.string(), startDate: v.string() }),
   occurredAt: v.string(),
   recipient: v.object({ email: v.string(), firstName: v.string() }),
   toolName: v.string(),
@@ -52,59 +30,30 @@ const payloadValidator = v.object({
 
 export type NotificationPayload = typeof payloadValidator.type;
 
-/** Records the event in the outbox and hands delivery to the retrying pool. */
-export async function enqueueNotification(
-  ctx: MutationCtx,
-  loanId: Id<"loans">,
-  event: NotificationEvent,
-  recipientId: Id<"users">
-): Promise<void> {
-  const outboxId = await ctx.db.insert("notificationOutbox", {
-    attempts: 0,
-    event,
-    loanId,
-    recipientId,
-    status: "pending",
-  });
-  await notificationPool.enqueueAction(
-    ctx,
-    internal.notifications.deliver,
-    { outboxId },
-    { context: { outboxId }, onComplete: internal.notifications.onDelivered }
-  );
-}
-
-function linkFor(recipient: Id<"users">, loan: Doc<"loans">) {
-  const base = (process.env.APP_URL ?? "").replace(TRAILING_SLASHES, "");
-  return `${base}${recipient === loan.ownerId ? "/my/incoming" : "/my/requests"}`;
-}
-
-export const buildPayload = internalQuery({
-  args: { outboxId: v.id("notificationOutbox") },
-  handler: async (ctx, { outboxId }) => {
+/** Counts the attempt and snapshots the payload in one transaction. */
+export const startAttempt = internalMutation({
+  args: { appUrl: v.string(), outboxId: v.id("notificationOutbox") },
+  handler: async (ctx, { appUrl, outboxId }) => {
     const entry = await ctx.db.get(outboxId);
     const loan = entry && (await ctx.db.get(entry.loanId));
     if (!(entry && loan)) return null;
-    const counterpartId =
-      entry.recipientId === loan.ownerId ? loan.borrowerId : loan.ownerId;
+    await ctx.db.patch(outboxId, { attempts: entry.attempts + 1 });
+
+    const isOwner = entry.recipientId === loan.ownerId;
     const [recipient, counterpart, tool] = await Promise.all([
       ctx.db.get(entry.recipientId),
-      ctx.db.get(counterpartId),
+      ctx.db.get(isOwner ? loan.borrowerId : loan.ownerId),
       ctx.db.get(loan.toolId),
     ]);
     if (!recipient?.email) return null;
     return {
-      appUrl: linkFor(entry.recipientId, loan),
+      appUrl: `${appUrl}${isOwner ? "/my/incoming" : "/my/requests"}`,
       counterpartFirstName: counterpart
         ? firstName(counterpart.name)
         : "A neighbor",
       event: entry.event,
       eventId: outboxId,
-      loan: {
-        endDate: loan.endDate,
-        startDate: loan.startDate,
-        status: loan.status,
-      },
+      loan: { endDate: loan.endDate, startDate: loan.startDate },
       occurredAt: new Date(entry._creationTime).toISOString(),
       recipient: {
         email: recipient.email,
@@ -114,16 +63,6 @@ export const buildPayload = internalQuery({
     };
   },
   returns: v.union(payloadValidator, v.null()),
-});
-
-export const recordAttempt = internalMutation({
-  args: { outboxId: v.id("notificationOutbox") },
-  handler: async (ctx, { outboxId }) => {
-    const entry = await ctx.db.get(outboxId);
-    if (entry) await ctx.db.patch(outboxId, { attempts: entry.attempts + 1 });
-    return null;
-  },
-  returns: v.null(),
 });
 
 function isRetryableStatus(status: number) {
@@ -136,13 +75,14 @@ export const deliver = internalAction({
   handler: async (ctx, { outboxId }) => {
     const url = process.env.N8N_REQUEST_WEBHOOK_URL;
     const secret = process.env.N8N_OUTBOUND_SECRET;
-    if (!(url && secret)) {
+    const appUrl = process.env.APP_URL?.replace(TRAILING_SLASHES, "");
+    if (!(url && secret && appUrl)) {
       throw new NonRetryableError(
-        "N8N_REQUEST_WEBHOOK_URL and N8N_OUTBOUND_SECRET must be set"
+        "N8N_REQUEST_WEBHOOK_URL, N8N_OUTBOUND_SECRET and APP_URL must be set"
       );
     }
-    await ctx.runMutation(internal.notifications.recordAttempt, { outboxId });
-    const payload = await ctx.runQuery(internal.notifications.buildPayload, {
+    const payload = await ctx.runMutation(internal.notifications.startAttempt, {
+      appUrl,
       outboxId,
     });
     if (!payload) {
@@ -163,6 +103,7 @@ export const deliver = internalAction({
         [TIMESTAMP_HEADER]: timestamp,
       },
       method: "POST",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!response.ok) {
       const message = `n8n responded ${response.status}`;
@@ -193,4 +134,29 @@ export const onDelivered = internalMutation({
     return null;
   },
   returns: v.null(),
+});
+
+/**
+ * Re-queues failed deliveries once an outage is fixed:
+ *   npx convex run notifications:redriveFailed
+ */
+export const redriveFailed = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const failed = await ctx.db
+      .query("notificationOutbox")
+      .withIndex("by_status", (q) => q.eq("status", "failed"))
+      .take(REDRIVE_LIMIT);
+    await Promise.all(
+      failed.map(async (entry) => {
+        await ctx.db.patch(entry._id, {
+          lastError: undefined,
+          status: "pending",
+        });
+        await scheduleDelivery(ctx, entry._id);
+      })
+    );
+    return failed.length;
+  },
+  returns: v.number(),
 });

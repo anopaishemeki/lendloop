@@ -15,6 +15,7 @@ import type * as lib_dates from "../lib/dates.js";
 import type * as lib_db from "../lib/db.js";
 import type * as lib_hmac from "../lib/hmac.js";
 import type * as lib_loans from "../lib/loans.js";
+import type * as lib_notifications from "../lib/notifications.js";
 import type * as lib_roles from "../lib/roles.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_users from "../lib/users.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   "lib/db": typeof lib_db;
   "lib/hmac": typeof lib_hmac;
   "lib/loans": typeof lib_loans;
+  "lib/notifications": typeof lib_notifications;
   "lib/roles": typeof lib_roles;
   "lib/text": typeof lib_text;
   "lib/users": typeof lib_users;
