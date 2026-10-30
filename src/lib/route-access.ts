@@ -1,7 +1,7 @@
 // Pure route rules for src/proxy.ts. The proxy only improves UX (redirects);
 // every Convex function re-checks identity and role on its own.
 
-const PUBLIC_PATHS = ["/", "/sign-in", "/sign-up"] as const;
+const PUBLIC_PREFIXES = ["/sign-in", "/sign-up"] as const;
 const ADMIN_PREFIX = "/admin";
 
 function matchesPrefix(pathname: string, prefix: string) {
@@ -9,9 +9,9 @@ function matchesPrefix(pathname: string, prefix: string) {
 }
 
 export function isPublicRoute(pathname: string) {
-  if (pathname === "/") return true;
-  return PUBLIC_PATHS.some(
-    (path) => path !== "/" && matchesPrefix(pathname, path)
+  return (
+    pathname === "/" ||
+    PUBLIC_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix))
   );
 }
 

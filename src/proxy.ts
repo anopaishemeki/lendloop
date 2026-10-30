@@ -6,16 +6,15 @@ export default clerkMiddleware(async (auth, req) => {
   const { pathname } = req.nextUrl;
   if (isPublicRoute(pathname)) return;
 
-  await auth.protect();
-  const { sessionClaims } = await auth();
-  if (!canAccessRoute(pathname, sessionClaims?.metadata?.role)) {
+  const { sessionClaims } = await auth.protect();
+  if (!canAccessRoute(pathname, sessionClaims.metadata?.role)) {
     return NextResponse.redirect(new URL("/tools", req.url));
   }
 });
 
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     "/(api|trpc)(.*)",
   ],
 };
