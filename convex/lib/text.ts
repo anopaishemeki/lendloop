@@ -1,9 +1,9 @@
 import { fail } from "../auth";
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting them is the point.
-const CONTROL_CHARS = /[\u0000-\u0009\u000B-\u001F\u007F]/u;
+const CONTROL_CHARS = /[\u0000-\u0008\u000B-\u001F\u007F]/u;
 
-/** Trims and length-checks free text; rejects control characters other than newlines. */
+/** Trims and length-checks free text; rejects control characters other than tabs and newlines. */
 export function cleanText(
   value: string,
   field: string,

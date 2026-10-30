@@ -100,6 +100,17 @@ describe("tools.create", () => {
   });
 });
 
+test("allows tabs and newlines in descriptions", async () => {
+  const { alice, t } = await setup();
+  const description = "Includes:\n\t2 batteries";
+  const id = await alice.caller.mutation(api.tools.create, {
+    ...drill,
+    description,
+  });
+  const row = await t.run((ctx) => ctx.db.get(id));
+  expect(row?.description).toBe(description);
+});
+
 describe("tools.update", () => {
   test("only the owner may edit, not other users or admins", async () => {
     const { admin, alice, bob } = await setup();
