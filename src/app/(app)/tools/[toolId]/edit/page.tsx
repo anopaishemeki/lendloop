@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
+import { Lock } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -35,7 +36,7 @@ export default function EditToolPage() {
 
   if (!tool.isMine) {
     return (
-      <EmptyState title="You can only edit your own listings">
+      <EmptyState icon={Lock} title="You can only edit your own listings">
         <Button asChild variant="outline">
           <Link href={BACK}>Back to my listings</Link>
         </Button>
@@ -45,7 +46,11 @@ export default function EditToolPage() {
 
   return (
     <>
-      <PageHeader title={`Edit ${tool.name}`} />
+      <PageHeader
+        description="Changes show up for neighbors right away."
+        eyebrow="Your listing"
+        title={`Edit ${tool.name}`}
+      />
       <ToolForm
         initial={{
           category: tool.category,

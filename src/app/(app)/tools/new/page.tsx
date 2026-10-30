@@ -27,7 +27,8 @@ export default function NewToolPage() {
   return (
     <>
       <PageHeader
-        description="Neighbors will see the name, category, condition and description."
+        description="Share something that sits idle. Neighbors see the name, category, condition and description; never your contact details."
+        eyebrow="Lend to the neighborhood"
         title="List a tool"
       />
       <ToolForm
