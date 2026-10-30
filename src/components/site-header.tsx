@@ -15,6 +15,7 @@ import { usePathname } from "next/navigation";
 import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { api } from "../../convex/_generated/api";
+import { firstName } from "../../convex/lib/users";
 
 const TOOL_FORM_PATH = /^\/tools\/(?:new|[^/]+\/edit)$/u;
 
@@ -88,7 +89,7 @@ export function SiteHeader() {
         <div className="ml-auto flex items-center gap-3">
           {me ? (
             <span className="text-muted-foreground hidden text-sm lg:inline">
-              Hi, {me.name.split(" ")[0]}
+              Hi, {firstName(me.name)}
             </span>
           ) : null}
           <UserButton />

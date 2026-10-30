@@ -37,6 +37,7 @@ export default function MyListingsPage() {
         emptyHint="A ladder, a tent, a stand mixer: what do you have that sits idle?"
         emptyIcon={Wrench}
         emptyTitle="You haven't listed anything yet"
+        label="Your tools"
         tools={tools}
       />
     </>

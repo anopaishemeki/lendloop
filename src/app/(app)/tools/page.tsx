@@ -48,6 +48,7 @@ function ToolBrowser() {
         emptyHint="Be the first to lend something in this category."
         emptyIcon={SearchX}
         emptyTitle="Nothing here yet"
+        label="Available tools"
         tools={tools}
       />
     </>
@@ -64,7 +65,14 @@ export default function ToolsPage() {
         title="All tools"
       />
       <Suspense
-        fallback={<ToolGrid emptyHint="" emptyTitle="" tools={undefined} />}
+        fallback={
+          <ToolGrid
+            emptyHint=""
+            emptyTitle=""
+            label="Available tools"
+            tools={undefined}
+          />
+        }
       >
         <ToolBrowser />
       </Suspense>

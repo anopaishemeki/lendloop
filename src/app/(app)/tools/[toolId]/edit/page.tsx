@@ -52,6 +52,7 @@ export default function EditToolPage() {
         title={`Edit ${tool.name}`}
       />
       <ToolForm
+        availability={tool.availability}
         initial={{
           category: tool.category,
           condition: tool.condition,
