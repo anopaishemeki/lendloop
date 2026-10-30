@@ -11,7 +11,9 @@ export const SIGNATURE_HEADER = "x-lendloop-signature";
 export const MAX_SKEW_SECONDS = 300;
 
 const SIGNATURE_PREFIX = "v1=";
-const HEX = /^[0-9a-f]+$/u;
+// SHA-256 MACs are 32 bytes, so a well-formed v1 signature is 64 hex chars.
+const HEX_MAC = /^[0-9a-f]{64}$/u;
+const HEX_PAIR = /../gu;
 const encoder = new TextEncoder();
 
 export type SignedRequest = {
@@ -27,27 +29,20 @@ export function signingString(
   return `${timestamp}.${method.toUpperCase()}.${path}.${body}`;
 }
 
-async function hmacHex(secret: string, data: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
+function hmacKey(secret: string, usage: "sign" | "verify") {
+  return crypto.subtle.importKey(
     "raw",
     encoder.encode(secret),
     { hash: "SHA-256", name: "HMAC" },
     false,
-    ["sign"]
+    [usage]
   );
-  const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(data));
-  return Array.from(new Uint8Array(mac), (byte) =>
-    byte.toString(16).padStart(2, "0")
-  ).join("");
 }
 
-function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
+function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(
+    (hex.match(HEX_PAIR) ?? []).map((pair) => Number.parseInt(pair, 16))
+  );
 }
 
 export async function signRequest(
@@ -56,8 +51,15 @@ export async function signRequest(
   nowMs = Date.now()
 ): Promise<{ timestamp: string; signature: string }> {
   const timestamp = Math.floor(nowMs / 1000).toString();
-  const mac = await hmacHex(secret, signingString(timestamp, request));
-  return { signature: `${SIGNATURE_PREFIX}${mac}`, timestamp };
+  const mac = await crypto.subtle.sign(
+    "HMAC",
+    await hmacKey(secret, "sign"),
+    encoder.encode(signingString(timestamp, request))
+  );
+  const hex = Array.from(new Uint8Array(mac), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
+  return { signature: `${SIGNATURE_PREFIX}${hex}`, timestamp };
 }
 
 export type VerifyResult =
@@ -79,14 +81,18 @@ export async function verifyRequest(
   const mac = signature.startsWith(SIGNATURE_PREFIX)
     ? signature.slice(SIGNATURE_PREFIX.length)
     : "";
-  if (!(Number.isInteger(seconds) && HEX.test(mac))) {
+  if (!(Number.isInteger(seconds) && HEX_MAC.test(mac))) {
     return { ok: false, reason: "malformed" };
   }
   if (Math.abs(nowMs / 1000 - seconds) > MAX_SKEW_SECONDS) {
     return { ok: false, reason: "stale" };
   }
-  const expected = await hmacHex(secret, signingString(timestamp, request));
-  return constantTimeEqual(expected, mac)
-    ? { ok: true }
-    : { ok: false, reason: "mismatch" };
+  // subtle.verify compares in constant time.
+  const valid = await crypto.subtle.verify(
+    "HMAC",
+    await hmacKey(secret, "verify"),
+    hexToBytes(mac),
+    encoder.encode(signingString(timestamp, request))
+  );
+  return valid ? { ok: true } : { ok: false, reason: "mismatch" };
 }
