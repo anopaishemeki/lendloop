@@ -33,7 +33,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ from: $vars.RESEND_FROM, to: [$vars.OPS_ALERT_EMAIL], subject: $json.subject, text: $json.text }) }}",
+        "jsonBody": "={{ JSON.stringify({ from: ($vars.RESEND_FROM || $env.RESEND_FROM), to: [($vars.OPS_ALERT_EMAIL || $env.OPS_ALERT_EMAIL)], subject: $json.subject, text: $json.text }) }}",
         "options": {
           "timeout": 10000
         }
