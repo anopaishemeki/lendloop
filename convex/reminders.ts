@@ -1,7 +1,9 @@
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { daysBetween, isIsoDate } from "./lib/dates";
 import { cachedGet } from "./lib/db";
+import { isOverdue } from "./lib/loans";
 import { firstName } from "./lib/users";
 import { reminderStatusValidator } from "./lib/validators";
 
@@ -14,59 +16,65 @@ export function reminderKey(loanId: string, reminderDate: string) {
 
 /**
  * What n8n needs to email one borrower: their own address, first names, the
- * tool and dates. The loan id and idempotency key let n8n write the result back.
+ * tool and dates. The loan id comes back in the write-back; the idempotency key
+ * doubles as the Resend Idempotency-Key.
  */
 const overdueLoanValidator = v.object({
-  appUrl: v.string(),
   borrower: v.object({ email: v.string(), firstName: v.string() }),
   daysOverdue: v.number(),
   dueDate: v.string(),
   idempotencyKey: v.string(),
   loanId: v.id("loans"),
   ownerFirstName: v.string(),
-  reminderDate: v.string(),
   toolName: v.string(),
 });
 
-/** Approved loans past their end date that have not had today's reminder sent. */
+/**
+ * Overdue loans still owed a reminder today, oldest due date first. Loans
+ * already reminded today are skipped before the batch limit applies, so a
+ * backlog larger than one batch is worked through by re-running the workflow.
+ */
 export const listOverdue = internalQuery({
-  args: { appUrl: v.string(), today: v.string() },
-  handler: async (ctx, { appUrl, today }) => {
-    const loans = await ctx.db
+  args: { today: v.string() },
+  handler: async (ctx, { today }) => {
+    const remindedToday = await ctx.db
+      .query("reminders")
+      .withIndex("by_reminder_date", (q) => q.eq("reminderDate", today))
+      .collect();
+    const sent = new Set(
+      remindedToday.filter((r) => r.status === "sent").map((r) => r.loanId)
+    );
+
+    const due: Doc<"loans">[] = [];
+    const overdue = ctx.db
       .query("loans")
       .withIndex("by_status_and_end_date", (q) =>
         q.eq("status", "approved").lt("endDate", today)
-      )
-      .take(OVERDUE_BATCH);
+      );
+    for await (const loan of overdue) {
+      if (isOverdue(loan, today) && !sent.has(loan._id)) due.push(loan);
+      if (due.length >= OVERDUE_BATCH) break;
+    }
 
     const get = cachedGet(ctx);
     const rows = await Promise.all(
-      loans.map(async (loan) => {
-        const idempotencyKey = reminderKey(loan._id, today);
-        const [sent, borrower, owner, tool] = await Promise.all([
-          ctx.db
-            .query("reminders")
-            .withIndex("by_idempotency_key", (q) =>
-              q.eq("idempotencyKey", idempotencyKey)
-            )
-            .unique(),
+      due.map(async (loan) => {
+        const [borrower, owner, tool] = await Promise.all([
           get(loan.borrowerId),
           get(loan.ownerId),
           get(loan.toolId),
         ]);
-        if (sent?.status === "sent" || !borrower?.email) return null;
+        if (!borrower?.email) return null;
         return {
-          appUrl: `${appUrl}/my/requests`,
           borrower: {
             email: borrower.email,
             firstName: firstName(borrower.name),
           },
           daysOverdue: daysBetween(loan.endDate, today),
           dueDate: loan.endDate,
-          idempotencyKey,
+          idempotencyKey: reminderKey(loan._id, today),
           loanId: loan._id,
           ownerFirstName: owner ? firstName(owner.name) : "the owner",
-          reminderDate: today,
           toolName: tool?.name ?? "the tool",
         };
       })
@@ -77,50 +85,47 @@ export const listOverdue = internalQuery({
 });
 
 /**
- * Idempotent write-back keyed on loan + reminder date: a retried or replayed
- * call never creates a second row. A later "sent" upgrades an earlier "failed"
- * (n8n retried the email); anything else is reported as a duplicate.
+ * Idempotent write-back keyed on loan + reminder date: retries and replays
+ * never create a second row. "sent" is final; a later "failed" for the same
+ * day only refreshes the stored error.
  */
 export const recordReminder = internalMutation({
   args: {
     error: v.optional(v.string()),
-    idempotencyKey: v.string(),
     loanId: v.string(),
     reminderDate: v.string(),
     status: reminderStatusValidator,
   },
-  handler: async (ctx, args) => {
-    const loanId = ctx.db.normalizeId("loans", args.loanId);
-    if (!(loanId && isIsoDate(args.reminderDate))) {
+  handler: async (ctx, { error, loanId: rawId, reminderDate, status }) => {
+    const loanId = ctx.db.normalizeId("loans", rawId);
+    if (!(loanId && isIsoDate(reminderDate) && (await ctx.db.get(loanId)))) {
       return { result: "invalid" as const };
     }
-    if (args.idempotencyKey !== reminderKey(loanId, args.reminderDate)) {
-      return { result: "invalid" as const };
-    }
-    if (!(await ctx.db.get(loanId))) return { result: "invalid" as const };
-
-    const error = args.error?.slice(0, MAX_ERROR_LENGTH);
+    const idempotencyKey = reminderKey(loanId, reminderDate);
+    const lastError =
+      status === "failed"
+        ? (error ?? "unknown error").slice(0, MAX_ERROR_LENGTH)
+        : undefined;
     const existing = await ctx.db
       .query("reminders")
       .withIndex("by_idempotency_key", (q) =>
-        q.eq("idempotencyKey", args.idempotencyKey)
+        q.eq("idempotencyKey", idempotencyKey)
       )
       .unique();
-    if (existing) {
-      if (existing.status === "failed" && args.status === "sent") {
-        await ctx.db.patch(existing._id, { error: undefined, status: "sent" });
-        return { result: "updated" as const };
-      }
-      return { result: "duplicate" as const };
+
+    if (!existing) {
+      await ctx.db.insert("reminders", {
+        idempotencyKey,
+        loanId,
+        reminderDate,
+        status,
+        ...(lastError ? { error: lastError } : {}),
+      });
+      return { result: "created" as const };
     }
-    await ctx.db.insert("reminders", {
-      idempotencyKey: args.idempotencyKey,
-      loanId,
-      reminderDate: args.reminderDate,
-      status: args.status,
-      ...(error && args.status === "failed" ? { error } : {}),
-    });
-    return { result: "created" as const };
+    if (existing.status === "sent") return { result: "duplicate" as const };
+    await ctx.db.patch(existing._id, { error: lastError, status });
+    return { result: "updated" as const };
   },
   returns: v.object({
     result: v.union(
@@ -130,4 +135,32 @@ export const recordReminder = internalMutation({
       v.literal("invalid")
     ),
   }),
+});
+
+/** Remembers an accepted signature; false if it was already used (a replay). */
+export const claimSignature = internalMutation({
+  args: { expiresAt: v.number(), signature: v.string() },
+  handler: async (ctx, { expiresAt, signature }) => {
+    const used = await ctx.db
+      .query("usedSignatures")
+      .withIndex("by_signature", (q) => q.eq("signature", signature))
+      .unique();
+    if (used) return false;
+    await ctx.db.insert("usedSignatures", { expiresAt, signature });
+    return true;
+  },
+  returns: v.boolean(),
+});
+
+export const purgeUsedSignatures = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const expired = await ctx.db
+      .query("usedSignatures")
+      .withIndex("by_expires_at", (q) => q.lt("expiresAt", Date.now()))
+      .take(1000);
+    await Promise.all(expired.map((row) => ctx.db.delete(row._id)));
+    return expired.length;
+  },
+  returns: v.number(),
 });

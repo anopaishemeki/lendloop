@@ -54,7 +54,8 @@ export default defineSchema({
     status: reminderStatusValidator,
   })
     .index("by_idempotency_key", ["idempotencyKey"])
-    .index("by_loan", ["loanId"]),
+    .index("by_loan", ["loanId"])
+    .index("by_reminder_date", ["reminderDate"]),
 
   tools: defineTable({
     category: categoryValidator,
@@ -69,6 +70,15 @@ export default defineSchema({
     .index("by_owner_and_removed_at", ["ownerId", "removedAt"])
     .index("by_category_and_removed_at", ["category", "removedAt"])
     .index("by_removed_at", ["removedAt"]),
+
+  // Signatures already accepted from n8n, kept until they would be stale anyway,
+  // so a captured request can't be replayed inside the freshness window.
+  usedSignatures: defineTable({
+    expiresAt: v.number(),
+    signature: v.string(),
+  })
+    .index("by_signature", ["signature"])
+    .index("by_expires_at", ["expiresAt"]),
 
   // Profile mirror of the Clerk user. Role is not stored: it is read from the
   // JWT on every call so revoking it in Clerk takes effect immediately.

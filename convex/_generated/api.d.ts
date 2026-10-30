@@ -10,10 +10,12 @@
 
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as lib_availability from "../lib/availability.js";
 import type * as lib_dates from "../lib/dates.js";
 import type * as lib_db from "../lib/db.js";
+import type * as lib_env from "../lib/env.js";
 import type * as lib_hmac from "../lib/hmac.js";
 import type * as lib_loans from "../lib/loans.js";
 import type * as lib_notifications from "../lib/notifications.js";
@@ -36,10 +38,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auth: typeof auth;
+  crons: typeof crons;
   http: typeof http;
   "lib/availability": typeof lib_availability;
   "lib/dates": typeof lib_dates;
   "lib/db": typeof lib_db;
+  "lib/env": typeof lib_env;
   "lib/hmac": typeof lib_hmac;
   "lib/loans": typeof lib_loans;
   "lib/notifications": typeof lib_notifications;
