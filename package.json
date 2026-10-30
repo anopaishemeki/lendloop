@@ -24,11 +24,13 @@
   "dependencies": {
     "@clerk/nextjs": "^7.9.22",
     "@convex-dev/workpool": "^0.4.15",
+    "@fontsource-variable/fraunces": "^5.3.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "convex": "^1.49.0",
     "convex-helpers": "^0.1.133",
     "date-fns": "^4.4.0",
+    "geist": "^1.8.1",
     "lucide-react": "^1.65.0",
     "next": "^16.4.3",
     "next-themes": "^0.4.6",
