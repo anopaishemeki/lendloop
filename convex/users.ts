@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { getViewer, requireViewerForWrite } from "./auth";
 
 const meValidator = v.object({
@@ -26,7 +26,13 @@ export const me = query({
     const viewer = await getViewer(ctx);
     if (!viewer?.user) return null;
     const { _id, email, isTrustedLender, name } = viewer.user;
-    return { _id, email, isAdmin: viewer.role === "admin", isTrustedLender, name };
+    return {
+      _id,
+      email,
+      isAdmin: viewer.role === "admin",
+      isTrustedLender,
+      name,
+    };
   },
   returns: v.union(meValidator, v.null()),
 });

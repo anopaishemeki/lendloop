@@ -8,7 +8,7 @@ describe("users.syncCurrentUser", () => {
   test("rejects signed-out callers", async () => {
     const t = convexTest(schema, modules);
     await expect(t.mutation(api.users.syncCurrentUser, {})).rejects.toThrow(
-      /Sign in/
+      /Sign in/u
     );
   });
 

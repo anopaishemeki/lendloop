@@ -47,14 +47,29 @@
   },
   "overrides": [
     {
-      "includes": ["convex/**/*.test.ts", "convex/test.setup.ts", "tests/**/*.test.ts"],
+      "includes": [
+        "convex/**/*.test.ts",
+        "convex/test.setup.ts",
+        "tests/**/*.test.ts"
+      ],
       "linter": {
         "rules": {
           "performance": {
-            "useTopLevelRegex": "off"
+            "useTopLevelRegex": "off",
+            "noAwaitInLoops": "off"
           },
           "suspicious": {
             "noFocusedTests": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/components/ui/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noLabelWithoutControl": "off"
           }
         }
       }
