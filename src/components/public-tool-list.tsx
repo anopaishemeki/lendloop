@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
+import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CATEGORY_LABELS } from "@/lib/tool-labels";
@@ -21,9 +22,11 @@ export function PublicToolList() {
 
   if (tools.length === 0) {
     return (
-      <p className="text-muted-foreground rounded-lg border border-dashed px-4 py-8 text-center text-sm">
-        Nothing listed yet. Sign in and be the first to lend something.
-      </p>
+      <EmptyState title="Nothing listed yet">
+        <p className="text-muted-foreground text-sm">
+          Sign in and be the first to lend something.
+        </p>
+      </EmptyState>
     );
   }
 

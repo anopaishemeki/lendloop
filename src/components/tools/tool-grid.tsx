@@ -1,0 +1,46 @@
+import type { ReactNode } from "react";
+import { EmptyState } from "@/components/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ToolCard } from "./tool-card";
+import type { ToolView } from "./types";
+
+const GRID = "grid gap-4 sm:grid-cols-2 lg:grid-cols-3";
+
+/** Loading, empty and populated states for a list of tool cards. */
+export function ToolGrid({
+  tools,
+  emptyTitle,
+  emptyHint,
+  actions,
+}: {
+  tools: ToolView[] | undefined;
+  emptyTitle: string;
+  emptyHint: string;
+  actions?: (tool: ToolView) => ReactNode;
+}) {
+  if (tools === undefined) {
+    return (
+      <div className={GRID}>
+        {Array.from({ length: 3 }, (_, i) => (
+          <Skeleton className="h-40" key={i} />
+        ))}
+      </div>
+    );
+  }
+
+  if (tools.length === 0) {
+    return (
+      <EmptyState title={emptyTitle}>
+        <p className="text-muted-foreground text-sm">{emptyHint}</p>
+      </EmptyState>
+    );
+  }
+
+  return (
+    <div className={GRID}>
+      {tools.map((tool) => (
+        <ToolCard actions={actions?.(tool)} key={tool._id} tool={tool} />
+      ))}
+    </div>
+  );
+}
