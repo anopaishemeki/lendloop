@@ -1,7 +1,7 @@
-import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { CategoryIcon } from "@/components/category-icon";
 import { Neighbor } from "@/components/neighbor";
-import { formatRange } from "@/lib/dates";
+import { formatDayCount, formatRange } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { LoanActions } from "./loan-actions";
 import { LoanActivity } from "./loan-activity";
@@ -16,7 +16,7 @@ function DateStub({ date }: { date: string }) {
       <span className="text-terracotta text-[0.65rem] font-medium tracking-widest uppercase">
         {format(day, "MMM")}
       </span>
-      <span className="font-serif text-2xl leading-none font-semibold">
+      <span className="font-display text-2xl leading-none font-semibold">
         {format(day, "d")}
       </span>
       <span className="text-muted-foreground text-[0.65rem]">
@@ -26,17 +26,11 @@ function DateStub({ date }: { date: string }) {
   );
 }
 
-function duration(startDate: string, endDate: string) {
-  const days =
-    differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
-  return days === 1 ? "1 day" : `${days} days`;
-}
-
 export function LoanCard({ loan }: { loan: LoanView }) {
   return (
     <li
       className={cn(
-        "bg-card flex flex-col gap-4 rounded-2xl border p-4 shadow-xs sm:flex-row sm:items-start sm:p-5",
+        "surface flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:p-5",
         loan.isOverdue && "border-destructive/40"
       )}
     >
@@ -44,7 +38,7 @@ export function LoanCard({ loan }: { loan: LoanView }) {
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <CategoryIcon category={loan.tool.category} size="sm" />
-          <h3 className="text-lg leading-tight font-semibold">
+          <h3 className="font-display text-lg leading-tight font-semibold">
             {loan.tool.name}
           </h3>
           <LoanStatusBadge isOverdue={loan.isOverdue} status={loan.status} />
@@ -59,7 +53,7 @@ export function LoanCard({ loan }: { loan: LoanView }) {
           <span aria-hidden className="mx-1.5">
             ·
           </span>
-          {duration(loan.startDate, loan.endDate)}
+          {formatDayCount(loan.startDate, loan.endDate)}
         </p>
         <Neighbor
           firstName={loan.counterpart.firstName}

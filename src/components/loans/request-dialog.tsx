@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { differenceInCalendarDays, parseISO } from "date-fns";
 import { CalendarClock, HandHelping } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { CategoryIcon } from "@/components/category-icon";
@@ -18,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatRange, localTodayIso } from "@/lib/dates";
+import { formatDayCount, formatRange, localTodayIso } from "@/lib/dates";
 import { useToastAction } from "@/lib/use-toast-action";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -73,9 +72,9 @@ export function RequestDialog({
   const { pending, run } = useToastAction();
   const today = localTodayIso();
   const latestEnd = latestEndFor(startDate);
-  const days =
+  const requested =
     startDate && endDate && endDate >= startDate
-      ? differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1
+      ? formatDayCount(startDate, endDate)
       : null;
 
   const changeStart = (value: string) => {
@@ -113,8 +112,8 @@ export function RequestDialog({
           <DialogHeader className="flex-row items-center gap-3 text-left">
             <CategoryIcon category={category} />
             <div className="space-y-1">
-              <DialogTitle className="font-serif text-2xl font-semibold">
-                Borrow the {toolName}
+              <DialogTitle className="font-display text-2xl font-semibold">
+                Borrow {toolName}
               </DialogTitle>
               <DialogDescription>
                 Pick the days you need it, up to {LOAN_MAX_DAYS} days.
@@ -160,9 +159,7 @@ export function RequestDialog({
           </div>
           <DialogFooter className="items-center sm:justify-between">
             <p className="text-muted-foreground text-sm" role="status">
-              {days
-                ? `${days === 1 ? "1 day" : `${days} days`} requested`
-                : null}
+              {requested ? `${requested} requested` : null}
             </p>
             <Button disabled={pending} type="submit">
               {pending ? "Sending…" : "Send request"}
