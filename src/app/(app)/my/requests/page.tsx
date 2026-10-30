@@ -5,8 +5,20 @@ import { LoanBoard } from "@/components/loans/loan-board";
 import { PageHeader } from "@/components/page-header";
 import { api } from "../../../../../convex/_generated/api";
 
+const COPY = {
+  active: {
+    empty: "Nothing borrowed right now.",
+    title: "Approved and borrowed",
+  },
+  history: { empty: "No past loans yet.", title: "History" },
+  pending: {
+    empty: "No requests waiting on an owner.",
+    title: "Waiting for the owner",
+  },
+};
+
 export default function MyRequestsPage() {
-  const loans = useQuery(api.loans.listMyRequests);
+  const board = useQuery(api.loans.listMyRequests);
 
   return (
     <>
@@ -14,18 +26,7 @@ export default function MyRequestsPage() {
         description="Tools you've asked to borrow."
         title="My requests"
       />
-      <LoanBoard
-        active={{
-          empty: "Nothing borrowed right now.",
-          title: "Approved and borrowed",
-        }}
-        history={{ empty: "No past loans yet.", title: "History" }}
-        loans={loans}
-        pending={{
-          empty: "No requests waiting on an owner.",
-          title: "Waiting for the owner",
-        }}
-      />
+      <LoanBoard board={board} copy={COPY} />
     </>
   );
 }

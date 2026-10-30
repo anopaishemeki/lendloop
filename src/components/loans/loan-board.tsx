@@ -1,22 +1,20 @@
+import type { FunctionReturnType } from "convex/server";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { api } from "../../../convex/_generated/api";
 import { LoanSection } from "./loan-section";
-import type { LoanView } from "./types";
 
+type Board = FunctionReturnType<typeof api.loans.listIncoming>;
 type SectionCopy = { title: string; empty: string };
 
-/** Splits loans into pending, active (approved) and closed sections. */
+/** Pending, active and closed loans, as grouped by the server. */
 export function LoanBoard({
-  loans,
-  pending,
-  active,
-  history,
+  board,
+  copy,
 }: {
-  loans: LoanView[] | undefined;
-  pending: SectionCopy;
-  active: SectionCopy;
-  history: SectionCopy;
+  board: Board | undefined;
+  copy: Record<keyof Board, SectionCopy>;
 }) {
-  if (loans === undefined) {
+  if (board === undefined) {
     return (
       <div className="grid gap-3">
         {Array.from({ length: 3 }, (_, i) => (
@@ -26,24 +24,11 @@ export function LoanBoard({
     );
   }
 
-  const byStatus = (match: (loan: LoanView) => boolean) => loans.filter(match);
-
   return (
     <div className="space-y-8">
-      <LoanSection
-        {...pending}
-        loans={byStatus((loan) => loan.status === "requested")}
-      />
-      <LoanSection
-        {...active}
-        loans={byStatus((loan) => loan.status === "approved")}
-      />
-      <LoanSection
-        {...history}
-        loans={byStatus(
-          (loan) => loan.status !== "requested" && loan.status !== "approved"
-        )}
-      />
+      <LoanSection {...copy.pending} loans={board.pending} />
+      <LoanSection {...copy.active} loans={board.active} />
+      <LoanSection {...copy.history} loans={board.history} />
     </div>
   );
 }

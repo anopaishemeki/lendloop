@@ -1,5 +1,4 @@
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 import type { LoanStatus } from "../../../convex/lib/validators";
 
 const STYLES: Record<LoanStatus, { label: string; className: string }> = {
@@ -29,7 +28,7 @@ export function LoanStatusBadge({
   }
   const { className, label } = STYLES[status];
   return (
-    <Badge className={cn(className)} variant="secondary">
+    <Badge className={className} variant="secondary">
       {label}
     </Badge>
   );

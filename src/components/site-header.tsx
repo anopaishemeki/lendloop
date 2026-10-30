@@ -7,28 +7,22 @@ import { cn } from "@/lib/utils";
 
 const TOOL_FORM_PATH = /^\/tools\/(?:new|[^/]+\/edit)$/u;
 
-const NAV = [
-  {
-    href: "/tools",
-    isActive: (path: string) => path === "/tools",
-    label: "All tools",
-  },
+type NavItem = {
+  href: string;
+  label: string;
+  isActive?: (path: string) => boolean;
+};
+
+const NAV: NavItem[] = [
+  { href: "/tools", label: "All tools" },
   {
     href: "/my/listings",
     isActive: (path: string) =>
       path === "/my/listings" || TOOL_FORM_PATH.test(path),
     label: "My listings",
   },
-  {
-    href: "/my/requests",
-    isActive: (path: string) => path === "/my/requests",
-    label: "My requests",
-  },
-  {
-    href: "/my/incoming",
-    isActive: (path: string) => path === "/my/incoming",
-    label: "Incoming",
-  },
+  { href: "/my/requests", label: "My requests" },
+  { href: "/my/incoming", label: "Incoming" },
 ];
 
 export function SiteHeader() {
@@ -42,7 +36,7 @@ export function SiteHeader() {
         </Link>
         <nav className="-mx-1 flex flex-1 gap-1 overflow-x-auto text-sm">
           {NAV.map(({ href, isActive, label }) => {
-            const active = isActive(pathname);
+            const active = isActive ? isActive(pathname) : pathname === href;
             return (
               <Link
                 aria-current={active ? "page" : undefined}
