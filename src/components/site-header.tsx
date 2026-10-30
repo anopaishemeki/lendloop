@@ -19,6 +19,16 @@ const NAV = [
       path === "/my/listings" || TOOL_FORM_PATH.test(path),
     label: "My listings",
   },
+  {
+    href: "/my/requests",
+    isActive: (path: string) => path === "/my/requests",
+    label: "My requests",
+  },
+  {
+    href: "/my/incoming",
+    isActive: (path: string) => path === "/my/incoming",
+    label: "Incoming",
+  },
 ];
 
 export function SiteHeader() {
