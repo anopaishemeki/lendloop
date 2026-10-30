@@ -1,9 +1,11 @@
 "use client";
 
 import { UserButton } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { api } from "../../convex/_generated/api";
 
 const TOOL_FORM_PATH = /^\/tools\/(?:new|[^/]+\/edit)$/u;
 
@@ -25,8 +27,13 @@ const NAV: NavItem[] = [
   { href: "/my/incoming", label: "Incoming" },
 ];
 
+// Shown only to admins; /admin and every admin function also check the role.
+const ADMIN_NAV: NavItem = { href: "/admin", label: "Admin" };
+
 export function SiteHeader() {
   const pathname = usePathname();
+  const me = useQuery(api.users.me);
+  const items = me?.isAdmin ? [...NAV, ADMIN_NAV] : NAV;
 
   return (
     <header className="bg-background/90 sticky top-0 z-10 border-b backdrop-blur">
@@ -35,7 +42,7 @@ export function SiteHeader() {
           LendLoop
         </Link>
         <nav className="-mx-1 flex flex-1 gap-1 overflow-x-auto text-sm">
-          {NAV.map(({ href, isActive, label }) => {
+          {items.map(({ href, isActive, label }) => {
             const active = isActive ? isActive(pathname) : pathname === href;
             return (
               <Link
