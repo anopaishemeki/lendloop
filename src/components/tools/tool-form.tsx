@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import { Eyebrow } from "@/components/eyebrow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ import {
   type ToolCondition,
 } from "../../../convex/lib/validators";
 import { ToolCard } from "./tool-card";
+import type { ToolView } from "./types";
 
 export type ToolFormValues = {
   name: string;
@@ -86,11 +88,14 @@ function ChoiceGroup<T extends string>({
 
 export function ToolForm({
   initial = EMPTY,
+  availability = "available",
   submitLabel,
   onSubmit,
   onCancel,
 }: {
   initial?: ToolFormValues;
+  /** Shown in the preview so editing a lent-out tool previews "On loan". */
+  availability?: ToolView["availability"];
   submitLabel: string;
   onSubmit: (values: ToolFormValues) => Promise<void>;
   onCancel: () => void;
@@ -115,10 +120,7 @@ export function ToolForm({
 
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <form
-        className="bg-card grid gap-7 rounded-2xl border p-6 shadow-xs sm:p-8"
-        onSubmit={handleSubmit}
-      >
+      <form className="surface grid gap-7 p-6 sm:p-8" onSubmit={handleSubmit}>
         <div className="grid gap-2">
           <Label htmlFor="tool-name">Name</Label>
           <Input
@@ -189,13 +191,13 @@ export function ToolForm({
       </form>
 
       <aside aria-label="Preview" className="space-y-3">
-        <p className="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
+        <Eyebrow className="text-muted-foreground">
           How neighbors will see it
-        </p>
+        </Eyebrow>
         <ToolCard
           tool={{
             ...values,
-            availability: "available",
+            availability,
             description: values.description.trim(),
             isMine: true,
             name: values.name.trim() || "Your tool's name",

@@ -9,6 +9,7 @@ const GRID = "grid gap-5 sm:grid-cols-2 lg:grid-cols-3";
 
 /** Loading, empty and populated states for a list of tool cards. */
 export function ToolGrid({
+  label,
   tools,
   emptyTitle,
   emptyHint,
@@ -16,6 +17,8 @@ export function ToolGrid({
   emptyAction,
   actions,
 }: {
+  /** Section heading for screen readers; the page title is the visible h1. */
+  label: string;
   tools: ToolView[] | undefined;
   emptyTitle: string;
   emptyHint: string;
@@ -43,10 +46,13 @@ export function ToolGrid({
   }
 
   return (
-    <div className={GRID}>
-      {tools.map((tool) => (
-        <ToolCard actions={actions?.(tool)} key={tool._id} tool={tool} />
-      ))}
-    </div>
+    <section>
+      <h2 className="sr-only">{label}</h2>
+      <div className={GRID}>
+        {tools.map((tool) => (
+          <ToolCard actions={actions?.(tool)} key={tool._id} tool={tool} />
+        ))}
+      </div>
+    </section>
   );
 }

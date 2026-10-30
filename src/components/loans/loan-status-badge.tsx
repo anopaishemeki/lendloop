@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import type { LoanStatus } from "../../../convex/lib/validators";
 
 const STYLES: Record<LoanStatus, { label: string; className: string }> = {
@@ -29,13 +29,8 @@ export function LoanStatusBadge({
     ? { className: "bg-destructive/12 text-destructive", label: "Overdue" }
     : STYLES[status];
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-        className
-      )}
-    >
+    <Badge className={className} variant="secondary">
       {label}
-    </span>
+    </Badge>
   );
 }

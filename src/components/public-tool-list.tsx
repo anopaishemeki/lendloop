@@ -38,7 +38,7 @@ export function PublicToolList() {
     <ul className={GRID}>
       {tools.map((tool, i) => (
         <li
-          className="bg-card flex items-center gap-3 rounded-xl border px-4 py-3 shadow-xs"
+          className="surface flex items-center gap-3 rounded-xl px-4 py-3"
           // The public query deliberately omits ids, so position is the key.
           key={`${i}-${tool.name}`}
         >

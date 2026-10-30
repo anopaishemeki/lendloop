@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { LoanCard } from "./loan-card";
 import type { LoanView } from "./types";
 
@@ -15,12 +16,12 @@ export function LoanSection({
 }) {
   return (
     <section className="space-y-4">
-      <h2 className="flex items-center gap-2.5 text-xl font-semibold">
+      <h2 className="font-display flex items-center gap-2.5 text-xl font-semibold">
         <Icon aria-hidden className="text-terracotta size-5" />
         {title}
-        <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 font-sans text-xs font-medium">
+        <Badge className="font-sans" variant="outline">
           {loans.length}
-        </span>
+        </Badge>
       </h2>
       {loans.length === 0 ? (
         <p className="text-muted-foreground rounded-2xl border border-dashed px-5 py-6 text-sm">

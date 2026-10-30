@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { ToolView } from "./types";
 
@@ -8,13 +9,14 @@ export function AvailabilityBadge({
 }) {
   const available = availability === "available";
   return (
-    <span
+    <Badge
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+        "gap-1.5 px-2.5 py-1",
         available
           ? "bg-success/12 text-success"
           : "bg-warning/18 text-accent-foreground"
       )}
+      variant="secondary"
     >
       <span
         aria-hidden
@@ -24,6 +26,6 @@ export function AvailabilityBadge({
         )}
       />
       {available ? "Available" : "On loan"}
-    </span>
+    </Badge>
   );
 }
