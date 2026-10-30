@@ -17,7 +17,7 @@ export default defineConfig({
           name: "convex",
           // convex-test and the @convex-dev/*/test helpers ship TypeScript that
           // calls import.meta.glob, so Vite must transform them.
-          server: { deps: { inline: ["convex-test", /@convex-dev\//] } },
+          server: { deps: { inline: ["convex-test", /@convex-dev\//u] } },
         },
       },
       {
