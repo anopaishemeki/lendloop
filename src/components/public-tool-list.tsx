@@ -1,20 +1,24 @@
 "use client";
 
 import { useQuery } from "convex/react";
+import { PackageOpen } from "lucide-react";
+import { CategoryIcon } from "@/components/category-icon";
 import { EmptyState } from "@/components/empty-state";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CATEGORY_LABELS } from "@/lib/tool-labels";
 import { api } from "../../convex/_generated/api";
 
+const GRID = "grid gap-3 sm:grid-cols-2 lg:grid-cols-3";
+
+/** Read-only list for signed-out visitors: name and category only. */
 export function PublicToolList() {
   const tools = useQuery(api.tools.listPublic);
 
   if (tools === undefined) {
     return (
-      <div className="grid gap-2">
-        {Array.from({ length: 4 }, (_, i) => (
-          <Skeleton className="h-12" key={i} />
+      <div className={GRID}>
+        {Array.from({ length: 6 }, (_, i) => (
+          <Skeleton className="h-[4.5rem] rounded-xl" key={i} />
         ))}
       </div>
     );
@@ -22,7 +26,7 @@ export function PublicToolList() {
 
   if (tools.length === 0) {
     return (
-      <EmptyState title="Nothing listed yet">
+      <EmptyState icon={PackageOpen} title="The shelf is empty for now">
         <p className="text-muted-foreground text-sm">
           Sign in and be the first to lend something.
         </p>
@@ -31,15 +35,20 @@ export function PublicToolList() {
   }
 
   return (
-    <ul className="bg-card divide-y rounded-lg border">
+    <ul className={GRID}>
       {tools.map((tool, i) => (
         <li
-          className="flex items-center justify-between gap-3 px-4 py-3"
+          className="bg-card flex items-center gap-3 rounded-xl border px-4 py-3 shadow-xs"
           // The public query deliberately omits ids, so position is the key.
           key={`${i}-${tool.name}`}
         >
-          <span className="font-medium">{tool.name}</span>
-          <Badge variant="outline">{CATEGORY_LABELS[tool.category]}</Badge>
+          <CategoryIcon category={tool.category} size="sm" />
+          <div className="min-w-0">
+            <p className="truncate font-medium">{tool.name}</p>
+            <p className="text-muted-foreground text-xs">
+              {CATEGORY_LABELS[tool.category]}
+            </p>
+          </div>
         </li>
       ))}
     </ul>
