@@ -1,7 +1,7 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
-import { BadgeCheck } from "lucide-react";
+import { useMutation, usePaginatedQuery } from "convex/react";
+import { TrustedLenderBadge } from "@/components/trusted-lender-badge";
 import { Button } from "@/components/ui/button";
 import {
   TableBody,
@@ -13,7 +13,7 @@ import {
 import { useToastAction } from "@/lib/use-toast-action";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { TableState } from "./table-state";
+import { ADMIN_PAGE_SIZE, TableState } from "./table-state";
 
 function TrustedToggle({
   userId,
@@ -46,10 +46,14 @@ function TrustedToggle({
 }
 
 export function AdminUsers() {
-  const users = useQuery(api.admin.listUsers);
+  const users = usePaginatedQuery(
+    api.admin.listUsers,
+    {},
+    { initialNumItems: ADMIN_PAGE_SIZE }
+  );
 
   return (
-    <TableState empty="No neighbors have signed up yet." rows={users}>
+    <TableState empty="No neighbors have signed up yet." query={users}>
       {(rows) => (
         <>
           <TableHeader>
@@ -65,10 +69,7 @@ export function AdminUsers() {
                 <TableCell className="font-medium">{user.name}</TableCell>
                 <TableCell>
                   {user.isTrustedLender ? (
-                    <span className="text-primary inline-flex items-center gap-1">
-                      <BadgeCheck aria-hidden className="size-4" />
-                      Trusted
-                    </span>
+                    <TrustedLenderBadge label="Trusted" />
                   ) : (
                     <span className="text-muted-foreground">No</span>
                   )}

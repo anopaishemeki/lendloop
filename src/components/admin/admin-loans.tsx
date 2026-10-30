@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { usePaginatedQuery } from "convex/react";
 import { useState } from "react";
 import { LoanStatusBadge } from "@/components/loans/loan-status-badge";
 import {
@@ -20,15 +20,17 @@ import {
 import { formatRange } from "@/lib/dates";
 import { api } from "../../../convex/_generated/api";
 import { LOAN_STATUSES, type LoanStatus } from "../../../convex/lib/validators";
-import { TableState } from "./table-state";
+import { ADMIN_PAGE_SIZE, TableState } from "./table-state";
 
 const ALL = "all";
 
 export function AdminLoans() {
   const [status, setStatus] = useState<LoanStatus | typeof ALL>(ALL);
-  const loans = useQuery(api.admin.listLoans, {
-    status: status === ALL ? undefined : status,
-  });
+  const loans = usePaginatedQuery(
+    api.admin.listLoans,
+    { status: status === ALL ? undefined : status },
+    { initialNumItems: ADMIN_PAGE_SIZE }
+  );
 
   return (
     <div className="space-y-4">
@@ -48,7 +50,7 @@ export function AdminLoans() {
           ))}
         </SelectContent>
       </Select>
-      <TableState empty="No loans match." rows={loans}>
+      <TableState empty="No loans match." query={loans}>
         {(rows) => (
           <>
             <TableHeader>

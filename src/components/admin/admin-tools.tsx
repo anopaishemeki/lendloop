@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { usePaginatedQuery } from "convex/react";
 import { AvailabilityBadge } from "@/components/tools/availability-badge";
 import { RemoveToolButton } from "@/components/tools/remove-tool-button";
 import {
@@ -12,13 +12,17 @@ import {
 } from "@/components/ui/table";
 import { CATEGORY_LABELS } from "@/lib/tool-labels";
 import { api } from "../../../convex/_generated/api";
-import { TableState } from "./table-state";
+import { ADMIN_PAGE_SIZE, TableState } from "./table-state";
 
 export function AdminTools() {
-  const tools = useQuery(api.admin.listTools);
+  const tools = usePaginatedQuery(
+    api.admin.listTools,
+    {},
+    { initialNumItems: ADMIN_PAGE_SIZE }
+  );
 
   return (
-    <TableState empty="No listings yet." rows={tools}>
+    <TableState empty="No listings yet." query={tools}>
       {(rows) => (
         <>
           <TableHeader>
@@ -40,7 +44,11 @@ export function AdminTools() {
                   <AvailabilityBadge availability={tool.availability} />
                 </TableCell>
                 <TableCell className="text-right">
-                  <RemoveToolButton toolId={tool._id} toolName={tool.name} />
+                  <RemoveToolButton
+                    isOnLoan={tool.availability === "on_loan"}
+                    toolId={tool._id}
+                    toolName={tool.name}
+                  />
                 </TableCell>
               </TableRow>
             ))}

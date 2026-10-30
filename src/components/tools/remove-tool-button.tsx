@@ -20,9 +20,11 @@ import type { Id } from "../../../convex/_generated/dataModel";
 export function RemoveToolButton({
   toolId,
   toolName,
+  isOnLoan = false,
 }: {
   toolId: Id<"tools">;
   toolName: string;
+  isOnLoan?: boolean;
 }) {
   const remove = useMutation(api.tools.remove);
   const { run } = useToastAction();
@@ -40,6 +42,9 @@ export function RemoveToolButton({
           <AlertDialogDescription>
             Open requests are declined and upcoming loans cancelled. Past loans
             stay in history.
+            {isOnLoan
+              ? " This tool is lent out right now: that loan stays open until the owner marks it returned."
+              : null}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
