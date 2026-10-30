@@ -198,15 +198,18 @@ describe("approve and decline", () => {
 
   test("approval is blocked when another approved loan overlaps", async () => {
     const s = await setup();
-    const first = await requestFor(s, day(1), day(3));
-    const second = await s.other.caller.mutation(api.loans.request, {
+    const pending = await seedLoan(s, {
       endDate: day(4),
       startDate: day(3),
-      toolId: s.toolId,
+      status: "requested",
     });
-    await s.owner.caller.mutation(api.loans.approve, { loanId: first });
+    await seedLoan(s, {
+      endDate: day(3),
+      startDate: day(1),
+      status: "approved",
+    });
     await expect(
-      s.owner.caller.mutation(api.loans.approve, { loanId: second })
+      s.owner.caller.mutation(api.loans.approve, { loanId: pending })
     ).rejects.toThrow(/already lent/u);
   });
 
@@ -322,8 +325,10 @@ describe("views", () => {
       startDate: day(-3),
       status: "approved",
     });
-    const [mine] = await s.borrower.caller.query(api.loans.listMyRequests, {});
-    const [incoming] = await s.owner.caller.query(api.loans.listIncoming, {});
+    const [mine] = (await s.borrower.caller.query(api.loans.listMyRequests, {}))
+      .active;
+    const [incoming] = (await s.owner.caller.query(api.loans.listIncoming, {}))
+      .active;
     expect(mine).toMatchObject({
       canMarkReturned: false,
       counterpart: { firstName: "olive" },
@@ -335,7 +340,11 @@ describe("views", () => {
       counterpart: { firstName: "ben" },
       role: "owner",
     });
-    expect(await s.other.caller.query(api.loans.listIncoming, {})).toEqual([]);
+    expect(await s.other.caller.query(api.loans.listIncoming, {})).toEqual({
+      active: [],
+      history: [],
+      pending: [],
+    });
   });
 
   test("booked ranges expose dates only", async () => {

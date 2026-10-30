@@ -11,6 +11,7 @@
 import type * as auth from "../auth.js";
 import type * as lib_availability from "../lib/availability.js";
 import type * as lib_dates from "../lib/dates.js";
+import type * as lib_db from "../lib/db.js";
 import type * as lib_loans from "../lib/loans.js";
 import type * as lib_roles from "../lib/roles.js";
 import type * as lib_text from "../lib/text.js";
@@ -30,6 +31,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   "lib/availability": typeof lib_availability;
   "lib/dates": typeof lib_dates;
+  "lib/db": typeof lib_db;
   "lib/loans": typeof lib_loans;
   "lib/roles": typeof lib_roles;
   "lib/text": typeof lib_text;
