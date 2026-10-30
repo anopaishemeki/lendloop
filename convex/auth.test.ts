@@ -1,19 +1,17 @@
-import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api } from "./_generated/api";
-import schema from "./schema";
-import { identityFor, modules } from "./test.setup";
+import { identityFor, newTest } from "./test.setup";
 
 describe("users.syncCurrentUser", () => {
   test("rejects signed-out callers", async () => {
-    const t = convexTest(schema, modules);
+    const t = newTest();
     await expect(t.mutation(api.users.syncCurrentUser, {})).rejects.toThrow(
       /Sign in/u
     );
   });
 
   test("creates one profile per Clerk user and is idempotent", async () => {
-    const t = convexTest(schema, modules);
+    const t = newTest();
     const alice = t.withIdentity(identityFor("alice"));
     const first = await alice.mutation(api.users.syncCurrentUser, {});
     const second = await alice.mutation(api.users.syncCurrentUser, {});
@@ -30,7 +28,7 @@ describe("users.syncCurrentUser", () => {
 
 describe("users.me", () => {
   test("is null when signed out or not yet synced", async () => {
-    const t = convexTest(schema, modules);
+    const t = newTest();
     expect(await t.query(api.users.me, {})).toBeNull();
     expect(
       await t.withIdentity(identityFor("bob")).query(api.users.me, {})
@@ -38,7 +36,7 @@ describe("users.me", () => {
   });
 
   test("derives admin only from the exact role claim", async () => {
-    const t = convexTest(schema, modules);
+    const t = newTest();
     const cases = [
       { expected: true, role: "admin" as const, subject: "root" },
       { expected: false, role: "user" as const, subject: "carol" },
@@ -53,7 +51,7 @@ describe("users.me", () => {
   });
 
   test("ignores wrong-cased or top-level role claims", async () => {
-    const t = convexTest(schema, modules);
+    const t = newTest();
     const caller = t.withIdentity({
       ...identityFor("eve"),
       metadata: { role: "Admin" },
@@ -66,7 +64,7 @@ describe("users.me", () => {
 
 describe("profile refresh", () => {
   test("a token without email keeps the stored address", async () => {
-    const t = convexTest(schema, modules);
+    const t = newTest();
     await t
       .withIdentity(identityFor("frank"))
       .mutation(api.users.syncCurrentUser, {});
@@ -78,7 +76,7 @@ describe("profile refresh", () => {
   });
 
   test("never uses the email as a display name", async () => {
-    const t = convexTest(schema, modules);
+    const t = newTest();
     await t
       .withIdentity({ ...identityFor("gina"), name: undefined })
       .mutation(api.users.syncCurrentUser, {});

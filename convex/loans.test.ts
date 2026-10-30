@@ -1,17 +1,15 @@
-import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { addDays, todayUtc } from "./lib/dates";
 import { canTransition } from "./lib/loans";
-import schema from "./schema";
-import { identityFor, modules } from "./test.setup";
+import { identityFor, newTest } from "./test.setup";
 
 const today = todayUtc();
 const day = (offset: number) => addDays(today, offset);
 
 async function setup() {
-  const t = convexTest(schema, modules);
+  const t = newTest();
   const as = async (subject: string, role?: "admin") => {
     const caller = t.withIdentity(identityFor(subject, role));
     const userId = await caller.mutation(api.users.syncCurrentUser, {});

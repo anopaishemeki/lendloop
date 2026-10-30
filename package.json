@@ -18,7 +18,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:convex": "vitest run --project convex",
-    "test:unit": "vitest run --project unit"
+    "test:unit": "vitest run --project unit",
+    "check:n8n": "node scripts/check-n8n-exports.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.22",
@@ -26,6 +27,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "convex": "^1.49.0",
+    "convex-helpers": "^0.1.133",
     "date-fns": "^4.4.0",
     "lucide-react": "^1.65.0",
     "next": "^16.4.3",

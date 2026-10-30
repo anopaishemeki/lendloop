@@ -1,0 +1,384 @@
+{
+  "name": "LendLoop - Request notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lendloop/request-events",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b01",
+      "name": "Request event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "5f1c2a7e-9d34-4b8a-a6e1-2c7d9f0b3e11"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verifies the HMAC from Convex before anything else runs. Secret: n8n Variable\n// LENDLOOP_OUTBOUND_SECRET (same value as Convex env N8N_OUTBOUND_SECRET).\nconst crypto = require('crypto');\n\nconst MAX_SKEW_SECONDS = 300;\nconst secret = $vars.LENDLOOP_OUTBOUND_SECRET;\nconst item = $input.first();\nconst headers = item.json.headers || {};\nconst timestamp = headers['x-lendloop-timestamp'];\nconst signature = headers['x-lendloop-signature'] || '';\n\n// Raw body (Webhook option \"Raw Body\") so we hash exactly the bytes Convex signed.\nlet raw = null;\ntry {\n  raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\n} catch (error) {\n  // Re-serializing item.json.body would not match the signed bytes.\n}\n\nconst path = new URL(item.json.webhookUrl).pathname;\n\nfunction check() {\n  if (!secret) return 'not configured';\n  if (raw === null) return 'no raw body (enable the Webhook \"Raw Body\" option)';\n  if (!timestamp || !signature.startsWith('v1=')) return 'missing signature';\n  const seconds = Number(timestamp);\n  if (!Number.isInteger(seconds)) return 'malformed timestamp';\n  if (Math.abs(Date.now() / 1000 - seconds) > MAX_SKEW_SECONDS) return 'stale';\n  const expected = crypto\n    .createHmac('sha256', secret)\n    .update(`${timestamp}.POST.${path}.${raw}`)\n    .digest();\n  const given = Buffer.from(signature.slice(3), 'hex');\n  if (given.length !== expected.length) return 'mismatch';\n  return crypto.timingSafeEqual(given, expected) ? null : 'mismatch';\n}\n\nconst reason = check();\nif (reason) {\n  return [{ json: { valid: false, reason } }];\n}\n\n// Pass on only the verified payload; headers and raw body stop here.\nreturn [{ json: { valid: true, payload: JSON.parse(raw) } }];\n"
+      },
+      "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b02",
+      "name": "Verify signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b03-c",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b03",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": \"invalid signature\" } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b04",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One short email per event, using only fields in the minimized payload.\nconst p = $input.first().json.payload;\nconst who = p.recipient.firstName;\nconst other = p.counterpartFirstName;\nconst tool = p.toolName;\nconst dates = p.loan.startDate === p.loan.endDate\n  ? p.loan.startDate\n  : `${p.loan.startDate} to ${p.loan.endDate}`;\n\nconst copy = {\n  'request.created': [\n    `${other} would like to borrow your ${tool}`,\n    `${other} asked to borrow your ${tool} for ${dates}. Approve or decline it here:`,\n  ],\n  'request.approved': [\n    `Your request for ${tool} was approved`,\n    `${other} approved your request to borrow the ${tool} for ${dates}. Details:`,\n  ],\n  'request.declined': [\n    `Your request for ${tool} was declined`,\n    `Your request to borrow the ${tool} for ${dates} was declined. Find something else here:`,\n  ],\n  'request.cancelled': [\n    `A loan for ${tool} was cancelled`,\n    `The loan of the ${tool} for ${dates} was cancelled. See your loans here:`,\n  ],\n  'loan.returned': [\n    `Thanks for returning the ${tool}`,\n    `${other} marked the ${tool} as returned. Thanks for borrowing responsibly!`,\n  ],\n};\nconst [subject, intro] = copy[p.event] || [`LendLoop update about ${tool}`, 'See your loans here:'];\n\nreturn [{\n  json: {\n    eventId: p.eventId,\n    to: p.recipient.email,\n    subject,\n    text: `Hi ${who},\\n\\n${intro}\\n${p.appUrl}\\n\\n- LendLoop`,\n  },\n}];\n"
+      },
+      "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b08",
+      "name": "Build email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ from: $vars.RESEND_FROM, to: [$json.to], subject: $json.subject, text: $json.text }) }}",
+        "options": {
+          "timeout": 10000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'lendloop-' + $json.eventId }}"
+            }
+          ]
+        }
+      },
+      "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b09",
+      "name": "Send email (Resend)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Resend API"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Tell Convex whether retrying can help: provider outages and rate limits can,\n// a rejected address or payload (4xx) cannot.\nconst error = $input.first().json.error || {};\nconst text = `${error.httpCode || ''} ${error.message || ''} ${error.description || ''}`;\nconst status = Number((text.match(/(?:^|\\D)([45]\\d\\d)(?:\\D|$)/) || [])[1]) || 0;\nconst retryable = status === 0 || status >= 500 || status === 408 || status === 429;\nreturn [{ json: { retryable, status } }];\n"
+      },
+      "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b10",
+      "name": "Classify failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b05-c",
+              "leftValue": "={{ $json.retryable }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b05",
+      "name": "Worth retrying?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": \"email rejected\" } }}",
+        "options": {
+          "responseCode": 422
+        }
+      },
+      "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b06",
+      "name": "Respond 422 (do not retry)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"received\": true } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b11",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": \"email provider unavailable\" } }}",
+        "options": {
+          "responseCode": 502
+        }
+      },
+      "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b12",
+      "name": "Respond 502 (Convex retries)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "=Resend did not accept event {{ $('Build email').first().json.eventId }}"
+      },
+      "id": "8b0a7c3e-1d2f-4a51-9b5e-0c6e5d1a2b13",
+      "name": "Fail execution",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        440
+      ]
+    }
+  ],
+  "connections": {
+    "Request event": {
+      "main": [
+        [
+          {
+            "node": "Verify signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify signature": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Build email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build email": {
+      "main": [
+        [
+          {
+            "node": "Send email (Resend)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send email (Resend)": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Classify failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify failure": {
+      "main": [
+        [
+          {
+            "node": "Worth retrying?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Worth retrying?": {
+      "main": [
+        [
+          {
+            "node": "Respond 502 (Convex retries)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 422 (do not retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 502 (Convex retries)": {
+      "main": [
+        [
+          {
+            "node": "Fail execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 422 (do not retry)": {
+      "main": [
+        [
+          {
+            "node": "Fail execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": false,
+  "pinData": {},
+  "tags": []
+}

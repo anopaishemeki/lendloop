@@ -30,6 +30,7 @@ import {
   loansForTool,
   transitionLoan,
 } from "./lib/loans";
+import { enqueueNotification } from "./lib/notifications";
 import { cleanText } from "./lib/text";
 import { publicProfile } from "./lib/users";
 import {
@@ -180,7 +181,7 @@ async function loadForAction(
   if (!allowedActions(viewer, loan, today)[action]) {
     fail("INVALID_TRANSITION", refusal(loan));
   }
-  return { loan, today };
+  return { loan, today, viewer };
 }
 
 /**
@@ -253,7 +254,7 @@ export const request = mutation({
     }
 
     const cleanNote = note ? cleanText(note, "Note", 0, LOAN_NOTE_MAX) : "";
-    return await ctx.db.insert("loans", {
+    const loanId = await ctx.db.insert("loans", {
       borrowerId: viewer.user._id,
       endDate,
       ownerId: tool.ownerId,
@@ -262,6 +263,8 @@ export const request = mutation({
       toolId,
       ...(cleanNote ? { note: cleanNote } : {}),
     });
+    await enqueueNotification(ctx, loanId, "request.created", tool.ownerId);
+    return loanId;
   },
   returns: v.id("loans"),
 });
@@ -270,7 +273,7 @@ export const request = mutation({
 export const approve = mutation({
   args: { loanId: v.id("loans") },
   handler: async (ctx, { loanId }) => {
-    const { loan, today } = await loadForAction(
+    const { loan, today, viewer } = await loadForAction(
       ctx,
       loanId,
       "canApprove",
@@ -287,11 +290,14 @@ export const approve = mutation({
     assertNoApprovedOverlap(approved, loan, today, loan._id);
 
     const now = Date.now();
-    await transitionLoan(ctx, loan, "approved", now);
+    const actorId = viewer.user._id;
+    await transitionLoan(ctx, loan, "approved", { actorId, now });
     await Promise.all(
       pending
         .filter((other) => other._id !== loan._id && rangesOverlap(other, loan))
-        .map((other) => transitionLoan(ctx, other, "declined", now))
+        .map((other) =>
+          transitionLoan(ctx, other, "declined", { actorId, now })
+        )
     );
     return null;
   },
@@ -301,13 +307,15 @@ export const approve = mutation({
 export const decline = mutation({
   args: { loanId: v.id("loans") },
   handler: async (ctx, { loanId }) => {
-    const { loan } = await loadForAction(
+    const { loan, viewer } = await loadForAction(
       ctx,
       loanId,
       "canDecline",
       () => "Only pending requests can be declined."
     );
-    await transitionLoan(ctx, loan, "declined");
+    await transitionLoan(ctx, loan, "declined", {
+      actorId: viewer.user._id,
+    });
     return null;
   },
   returns: v.null(),
@@ -316,12 +324,18 @@ export const decline = mutation({
 export const cancel = mutation({
   args: { loanId: v.id("loans") },
   handler: async (ctx, { loanId }) => {
-    const { loan } = await loadForAction(ctx, loanId, "canCancel", (l) =>
-      l.status === "approved"
-        ? "This loan has started. Mark it returned instead."
-        : "This request can't be cancelled."
+    const { loan, viewer } = await loadForAction(
+      ctx,
+      loanId,
+      "canCancel",
+      (l) =>
+        l.status === "approved"
+          ? "This loan has started. Mark it returned instead."
+          : "This request can't be cancelled."
     );
-    await transitionLoan(ctx, loan, "cancelled");
+    await transitionLoan(ctx, loan, "cancelled", {
+      actorId: viewer.user._id,
+    });
     return null;
   },
   returns: v.null(),
@@ -331,12 +345,18 @@ export const cancel = mutation({
 export const markReturned = mutation({
   args: { loanId: v.id("loans") },
   handler: async (ctx, { loanId }) => {
-    const { loan } = await loadForAction(ctx, loanId, "canMarkReturned", (l) =>
-      l.status === "approved"
-        ? "This loan hasn't started yet. Cancel it instead."
-        : "Only loans that are out can be marked returned."
+    const { loan, viewer } = await loadForAction(
+      ctx,
+      loanId,
+      "canMarkReturned",
+      (l) =>
+        l.status === "approved"
+          ? "This loan hasn't started yet. Cancel it instead."
+          : "Only loans that are out can be marked returned."
     );
-    await transitionLoan(ctx, loan, "returned");
+    await transitionLoan(ctx, loan, "returned", {
+      actorId: viewer.user._id,
+    });
     return null;
   },
   returns: v.null(),

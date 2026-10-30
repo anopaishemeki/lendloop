@@ -216,6 +216,7 @@ export const remove = mutation({
 
     const today = todayUtc();
     const now = Date.now();
+    const actorId = viewer.user._id;
     const [requested, approved] = await Promise.all([
       loansForTool(ctx, toolId, "requested"),
       loansForTool(ctx, toolId, "approved"),
@@ -227,10 +228,14 @@ export const remove = mutation({
       fail("CONFLICT", "This tool is out on loan. Mark it returned first.");
     }
     await Promise.all([
-      ...requested.map((loan) => transitionLoan(ctx, loan, "declined", now)),
+      ...requested.map((loan) =>
+        transitionLoan(ctx, loan, "declined", { actorId, now })
+      ),
       ...approved
         .filter((loan) => !isOnLoan(loan, today))
-        .map((loan) => transitionLoan(ctx, loan, "cancelled", now)),
+        .map((loan) =>
+          transitionLoan(ctx, loan, "cancelled", { actorId, now })
+        ),
     ]);
     await ctx.db.patch(toolId, { removedAt: now, removedBy: viewer.user._id });
     return null;

@@ -1,0 +1,92 @@
+{
+  "name": "LendLoop - Error handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c41e9d27-5a8b-4f0c-8e2d-7b3a1f6c9d01",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Summarize the failure without copying any payload data into the alert.\nconst { execution = {}, workflow = {} } = $input.first().json;\nconst error = execution.error || {};\nconst lines = [\n  `Workflow: ${workflow.name || 'unknown'}`,\n  `Failed node: ${execution.lastNodeExecuted || error.node?.name || 'unknown'}`,\n  `Error: ${error.message || 'unknown error'}`,\n  `Execution: ${execution.url || execution.id || 'n/a'}`,\n  `Mode: ${execution.mode || 'n/a'}`,\n];\nreturn [{\n  json: {\n    subject: `[LendLoop] ${workflow.name || 'Workflow'} failed`,\n    text: lines.join('\\n'),\n  },\n}];\n"
+      },
+      "id": "c41e9d27-5a8b-4f0c-8e2d-7b3a1f6c9d02",
+      "name": "Format alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ from: $vars.RESEND_FROM, to: [$vars.OPS_ALERT_EMAIL], subject: $json.subject, text: $json.text }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "c41e9d27-5a8b-4f0c-8e2d-7b3a1f6c9d03",
+      "name": "Email ops (Resend)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Resend API"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format alert": {
+      "main": [
+        [
+          {
+            "node": "Email ops (Resend)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true
+  },
+  "active": false,
+  "pinData": {},
+  "tags": []
+}
