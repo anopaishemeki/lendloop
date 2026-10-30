@@ -16,6 +16,7 @@ import { categoryValidator, conditionValidator } from "./lib/validators";
 
 const NAME_MAX = 80;
 const DESCRIPTION_MAX = 500;
+const PUBLIC_LIMIT = 100;
 
 const toolFields = {
   category: categoryValidator,
@@ -46,20 +47,37 @@ function cleanFields(args: { name: string; description: string }) {
   };
 }
 
-async function toView(ctx: QueryCtx, viewer: Viewer, tool: Doc<"tools">) {
-  const owner = await ctx.db.get(tool.ownerId);
-  return {
-    _id: tool._id,
-    availability: await availabilityOf(ctx, tool._id),
-    category: tool.category,
-    condition: tool.condition,
-    description: tool.description,
-    isMine: isSelf(viewer, tool.ownerId),
-    name: tool.name,
-    owner: {
-      firstName: owner ? firstName(owner.name) : "Neighbor",
-      isTrustedLender: owner?.isTrustedLender ?? false,
-    },
+/** Builds card views, loading each owner once per query instead of once per tool. */
+function viewBuilder(ctx: QueryCtx, viewer: Viewer) {
+  const today = todayUtc();
+  const owners = new Map<Id<"users">, Promise<Doc<"users"> | null>>();
+  const ownerOf = (id: Id<"users">) => {
+    let owner = owners.get(id);
+    if (!owner) {
+      owner = ctx.db.get(id);
+      owners.set(id, owner);
+    }
+    return owner;
+  };
+
+  return async (tool: Doc<"tools">) => {
+    const [owner, availability] = await Promise.all([
+      ownerOf(tool.ownerId),
+      availabilityOf(ctx, tool._id, today),
+    ]);
+    return {
+      _id: tool._id,
+      availability,
+      category: tool.category,
+      condition: tool.condition,
+      description: tool.description,
+      isMine: isSelf(viewer, tool.ownerId),
+      name: tool.name,
+      owner: {
+        firstName: owner ? firstName(owner.name) : "Neighbor",
+        isTrustedLender: owner?.isTrustedLender ?? false,
+      },
+    };
   };
 }
 
@@ -79,17 +97,18 @@ export const listPublic = query({
   args: {},
   handler: async (ctx) => {
     const today = todayUtc();
-    const tools = await ctx.db
+    const visible: { category: Doc<"tools">["category"]; name: string }[] = [];
+    const listed = ctx.db
       .query("tools")
       .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined))
-      .order("desc")
-      .take(100);
-    const availability = await Promise.all(
-      tools.map((tool) => availabilityOf(ctx, tool._id, today))
-    );
-    return tools
-      .filter((_, i) => availability[i] === "available")
-      .map(({ category, name }) => ({ category, name }));
+      .order("desc");
+    for await (const tool of listed) {
+      if ((await availabilityOf(ctx, tool._id, today)) === "available") {
+        visible.push({ category: tool.category, name: tool.name });
+        if (visible.length >= PUBLIC_LIMIT) break;
+      }
+    }
+    return visible;
   },
   returns: v.array(v.object({ category: categoryValidator, name: v.string() })),
 });
@@ -111,7 +130,7 @@ export const list = query({
           .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined))
           .order("desc")
           .collect();
-    return await Promise.all(tools.map((tool) => toView(ctx, viewer, tool)));
+    return await Promise.all(tools.map(viewBuilder(ctx, viewer)));
   },
   returns: v.array(toolView),
 });
@@ -120,7 +139,7 @@ export const get = query({
   args: { toolId: v.id("tools") },
   handler: async (ctx, { toolId }) => {
     const viewer = await requireViewer(ctx);
-    return await toView(ctx, viewer, await getActiveTool(ctx, toolId));
+    return await viewBuilder(ctx, viewer)(await getActiveTool(ctx, toolId));
   },
   returns: toolView,
 });
@@ -135,7 +154,7 @@ export const listMine = query({
       .order("desc")
       .collect();
     const active = tools.filter((tool) => tool.removedAt === undefined);
-    return await Promise.all(active.map((tool) => toView(ctx, viewer, tool)));
+    return await Promise.all(active.map(viewBuilder(ctx, viewer)));
   },
   returns: v.array(toolView),
 });
