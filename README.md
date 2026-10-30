@@ -1,2 +1,406 @@
-# lendloop
-A neighborhood tool-lending board. Next.js (App Router) + Clerk + Convex, with n8n workflows for request notifications and daily overdue reminders. Role-based access enforced in Convex, HMAC-signed webhooks in both directions, idempotent write-backs, and an error workflow for visible failures
+# LendLoop
+
+A neighborhood tool-lending board. Neighbors list tools they're happy to lend, request to borrow each other's tools for a date range, and get notified by email. n8n handles request notifications and daily overdue reminders.
+
+*Borrow what you need. Lend what you don't.*
+
+**Stack:** Next.js 16 (App Router), strict TypeScript, Clerk, Convex, n8n Cloud, Resend (email through n8n).
+
+## Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [Local setup](#local-setup)
+- [Environment variables](#environment-variables)
+- [Roles and admin provisioning](#roles-and-admin-provisioning)
+- [Security and data minimization](#security-and-data-minimization)
+- [Reliability and error handling](#reliability-and-error-handling)
+- [Decisions](#decisions)
+- [Assumptions and what is not verified end to end](#assumptions-and-what-is-not-verified-end-to-end)
+- [Running in production](#running-in-production)
+- [Project layout](#project-layout)
+- [Scripts](#scripts)
+
+## Features
+
+**Public page (`/`)**
+- Company name, tagline and a "Sign in to lend or borrow" button (Clerk).
+- A read-only list of available tools showing only name and category. The Convex query's `returns` validator only lets those two fields through.
+
+**Signed-in pages**
+- **All tools** (`/tools`): availability badges, a category filter kept in the URL, the owner's first name and a Trusted Lender badge.
+- **List a tool** and **Edit**: name, category, condition and a short description.
+- **Request to borrow:** pick a date range. The dialog shows dates already booked.
+- **My listings**, **My requests** and **Incoming requests:**
+  - Owners approve, decline, mark returned or cancel.
+  - Borrowers withdraw a request or cancel before the loan starts.
+  - Each loan shows its recent automation, e.g. "Overdue reminder sent to you 2 days ago" (bonus feature).
+- **Admin** (`/admin`): all loans with a status filter, remove any listing, mark lenders as Trusted Lender.
+
+**Automation**
+- **Request notifications:** every request and status change sends an HMAC-signed event to an n8n Cloud production webhook, and n8n emails the person concerned.
+- **Overdue reminders:** a daily n8n schedule fetches overdue loans from a signed Convex endpoint, emails each borrower and writes the outcome back to Convex. The write-back is idempotent.
+- **Error workflow:** surfaces any failed run.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Browser
+    UI[Next.js App Router UI]
+  end
+  Clerk[(Clerk)]
+  subgraph Convex
+    Q[Queries / mutations<br/>RBAC via convex/auth.ts]
+    DB[(Tables: users, tools, loans,<br/>notificationOutbox, reminders)]
+    WP[Workpool: deliver action<br/>retries + onComplete]
+    HTTP[HTTP actions<br/>/n8n/overdue-loans<br/>/n8n/reminders]
+  end
+  subgraph n8n Cloud
+    W1[Request notifications<br/>Webhook → verify HMAC → email]
+    W2[Overdue reminders<br/>Schedule → fetch → email → write back]
+    WE[Error handler]
+  end
+  Resend[(Resend)]
+
+  UI -- sign in --> Clerk
+  UI -- Clerk JWT --> Q
+  Q --> DB
+  Q -- enqueue event --> WP
+  WP -- "POST signed (HMAC, ts)" --> W1
+  W1 --> Resend
+  W2 -- "GET signed" --> HTTP
+  HTTP -- "signed response" --> W2
+  W2 --> Resend
+  W2 -- "POST signed outcome" --> HTTP
+  HTTP --> DB
+  W1 -. on failure .-> WE
+  W2 -. on failure .-> WE
+  WE --> Resend
+```
+
+**Data flow**
+
+1. **Sign-in.** The browser signs in with Clerk. `ConvexProviderWithClerk` sends a Clerk JWT, from the `convex` template, with every Convex call. Convex verifies it against the Clerk issuer in `convex/auth.config.ts`. A signed-in user's Convex profile row is created by `users.syncCurrentUser`, and the signed-in pages wait until it exists.
+2. **Business rules live in Convex.** Every query and mutation starts with a guard from `convex/auth.ts`. The state machine and overlap rules are in `convex/lib/loans.ts` and `convex/loans.ts`. React only renders what the server returns, including which actions are allowed (`canApprove`, `canCancel`, and so on).
+3. **Convex → n8n.**
+   - Each loan status change goes through `transitionLoan`, which writes one `notificationOutbox` row and puts a delivery on a workpool. New requests write the row directly.
+   - The `deliver` action builds a minimal payload, signs it and POSTs it to the n8n production webhook.
+   - `onDelivered` records `sent` or `failed`.
+   - The user's mutation never waits on n8n.
+4. **n8n → Convex.**
+   - The reminders workflow signs a GET to `/n8n/overdue-loans`.
+   - Convex verifies the signature, rejects replays, and returns a signed list of overdue loans.
+   - n8n verifies that response, emails each borrower, then signs a POST of each outcome to `/n8n/reminders`.
+   - Convex stores at most one reminder per loan per day.
+
+## Local setup
+
+Prerequisites:
+- Node 22+ and npm
+- accounts on Clerk, Convex, n8n Cloud (the trial is fine) and Resend
+
+### 1. Install
+
+```bash
+npm ci
+```
+
+### 2. Clerk
+
+1. Create an application, then copy the **Publishable key** and **Secret key** into `.env.local` (start from `.env.example`).
+2. Go to **Configure → JWT templates → New template → Convex**. Name it exactly `convex` and use these claims:
+
+   ```json
+   {
+     "aud": "convex",
+     "email": "{{user.primary_email_address}}",
+     "name": "{{user.full_name}}",
+     "given_name": "{{user.first_name}}",
+     "family_name": "{{user.last_name}}",
+     "metadata": "{{user.public_metadata}}"
+   }
+   ```
+
+   Copy the template's **Issuer** URL; you'll need it in step 3.
+3. Go to **Configure → Sessions → Customize session token** and add:
+
+   ```json
+   { "metadata": "{{user.public_metadata}}" }
+   ```
+
+   The Next.js proxy reads this claim to redirect non-admins away from `/admin`.
+
+### 3. Convex
+
+```bash
+npx convex dev   # first run: log in, create/select a project; writes CONVEX_DEPLOYMENT and URLs to .env.local
+```
+
+Then set the deployment variables (full list under [Environment variables](#environment-variables)):
+
+```bash
+npx convex env set NEXT_PUBLIC_CLERK_FRONTEND_API_URL https://<your-app>.clerk.accounts.dev
+npx convex env set APP_URL http://localhost:3000
+npx convex env set N8N_OUTBOUND_SECRET <random hex>
+npx convex env set N8N_INBOUND_SECRET <different random hex>
+# after step 5:
+npx convex env set N8N_REQUEST_WEBHOOK_URL https://<instance>.app.n8n.cloud/webhook/lendloop/request-events
+```
+
+Generate each secret with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Keep `npx convex dev` running while you develop.
+
+### 4. Run the app
+
+```bash
+npm run dev   # http://localhost:3000
+```
+
+### 5. n8n Cloud
+
+Follow [`n8n/README.md`](n8n/README.md). In short:
+1. Create the five Variables and the `Resend API` Header Auth credential.
+2. Import the three workflows from `n8n/workflows/`.
+3. Set **LendLoop - Error handler** as the error workflow on the other two.
+4. Activate all three.
+5. Copy the **production** webhook URL of *Request notifications* into the Convex env variable `N8N_REQUEST_WEBHOOK_URL`.
+
+**Running n8n locally instead.** `docker compose up -d` starts n8n with the settings the workflows need (`n8n/.env.example` lists the values). The workflows are instance-agnostic: only the webhook base URL, the credential and the five settings change. Convex runs in the cloud, so a local n8n must be reachable from the internet (for example through a tunnel) to receive request events.
+
+### 6. Make yourself admin
+
+In Clerk, open your user → **Metadata → Public** and set `{"role": "admin"}`. Then sign out and back in to refresh the token.
+
+## Environment variables
+
+**Web app, `.env.local`** (template: [`.env.example`](.env.example))
+
+| Variable | Purpose |
+|---|---|
+| `CONVEX_DEPLOYMENT`, `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL` | Written by `npx convex dev` |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Clerk API keys |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_URL`, `NEXT_PUBLIC_CLERK_SIGN_UP_URL`, `NEXT_PUBLIC_CLERK_*_FALLBACK_REDIRECT_URL` | Clerk routing |
+
+**Convex deployment**, set with `npx convex env set` (template: [`convex/.env.example`](convex/.env.example)). Convex does not read that file.
+
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_CLERK_FRONTEND_API_URL` | Clerk issuer; Convex validates JWTs against it |
+| `APP_URL` | Public app URL used for links in emails |
+| `N8N_REQUEST_WEBHOOK_URL` | Production webhook URL of *Request notifications* |
+| `N8N_OUTBOUND_SECRET` | Signs Convex → n8n requests |
+| `N8N_INBOUND_SECRET` | Verifies n8n → Convex requests and signs the overdue response |
+
+**n8n Variables** (on self-hosted community installs, environment variables): `LENDLOOP_CONVEX_SITE_URL`, `LENDLOOP_OUTBOUND_SECRET`, `LENDLOOP_INBOUND_SECRET`, `RESEND_FROM`, `OPS_ALERT_EMAIL`.
+
+**n8n credential:** `Resend API` (Header Auth: `Authorization: Bearer re_...`).
+
+No secret is in the code or in the exported workflow JSON.
+
+## Roles and admin provisioning
+
+There are two roles:
+- **user:** create, edit and delete only their own listings; act only on requests that involve their own tools or their own borrowing.
+- **admin:** remove any listing, view all loans, and mark a lender as Trusted Lender.
+
+**How an admin is provisioned:** set `publicMetadata.role = "admin"` on the user in Clerk. The `convex` JWT template and the session token both carry it as the `metadata` claim.
+- `convex/lib/roles.ts` (`roleFromMetadata`) is the one place that turns the claim into a role. Anything other than the exact string `"admin"` is a user.
+- Both `src/proxy.ts` (UI redirect) and every Convex function use it.
+- The role is never stored in Convex and never taken from client arguments, so removing it in Clerk takes effect on the next token refresh.
+
+**Enforcement:**
+- Each Convex function begins with `requireViewer` or `requireAdmin`.
+- Ownership and party checks use `assertToolOwner`, `assertToolOwnerOrAdmin` and `assertLoanParty` from `convex/auth.ts`.
+- Loan actions are checked against one rule set (`allowedActions` in `convex/loans.ts`), the same one that decides which buttons the UI shows.
+- HTTP endpoints have no user. They are authorized only by a valid, fresh HMAC.
+
+## Security and data minimization
+
+**Identity**
+- Identity always comes from `ctx.auth.getUserIdentity()`, which Clerk signs.
+- No function accepts a user ID that identifies the caller. Admin functions accept a target `userId`, and only after `requireAdmin`.
+
+**Public data**
+- `tools.listPublic` returns only `{ name, category }`, enforced by its `returns` validator. It sends no IDs, owner details or descriptions.
+
+**What users see about each other**
+- Other users see first names only, never email addresses.
+- Display names are never derived from email addresses.
+- Admins see full names.
+
+**HMAC in both directions** (`convex/lib/hmac.ts`)
+- Each request carries `X-LendLoop-Timestamp` and `X-LendLoop-Signature: v1=HMAC-SHA256(secret, "<ts>.<METHOD>.<path>.<raw body>")`.
+- Covering the method and path stops a signature for one endpoint from being replayed against another.
+- Requests more than 5 minutes off are rejected.
+- Convex compares signatures with WebCrypto `verify`, which runs in constant time. n8n uses `crypto.timingSafeEqual` in a Code node, before any other node runs, and responds 401 on mismatch.
+- Each direction has its own secret.
+- The overdue-loans response is signed too, so n8n only emails data that really came from Convex.
+- Signatures on that GET can be used only once (`usedSignatures`, purged daily), so a captured request can't be replayed to pull borrower emails again.
+
+**Fail closed**
+- With a missing secret, the HTTP endpoints return 500 and the delivery action refuses to send.
+- Write-back bodies are capped at 10 KB, checked against `Content-Length` before reading.
+- Write-back fields are validated by Convex validators, so unknown fields are rejected.
+
+**Payload minimization**
+- Convex → n8n: `eventId, event, occurredAt, recipient {email, firstName}, counterpartFirstName, toolName, loan {startDate, endDate}, appUrl`.
+- Overdue list: `loanId, idempotencyKey, dueDate, daysOverdue, toolName, ownerFirstName, borrower {email, firstName}`.
+- Neither carries user IDs, notes, descriptions or the other party's email.
+- The request-notification workflow doesn't store successful executions.
+- Error alerts contain no payload data.
+
+**Exports**
+- `npm run check:n8n` runs in CI. It fails on credential IDs, secret-looking strings, pinned data and instance IDs.
+
+**Input validation**
+- Every argument has a Convex validator.
+- Free text is trimmed, length-limited and stripped of control characters.
+- Dates must be real calendar days, `start ≤ end`, no more than 30 days long and no more than 180 days ahead.
+
+## Reliability and error handling
+
+**Convex → n8n**
+- Delivery runs on `@convex-dev/workpool`, retried up to 6 times with exponential backoff (about 20 minutes).
+- 4xx responses (other than 408 and 429) are not retried.
+- Each attempt is counted in the same transaction that snapshots the payload.
+- Failures are recorded on the outbox row and logged.
+- After fixing an outage, run `npx convex run notifications:redriveFailed` to resend failed events.
+
+**Duplicates**
+- n8n sends with a Resend `Idempotency-Key` derived from the event ID, so a retried delivery never sends a second email.
+
+**n8n**
+- HTTP nodes use Retry On Fail.
+- The Resend node routes errors to an error output. The workflow answers 502 (retryable) or 422 (permanent) and then fails the run on purpose, so the **Error handler** emails `OPS_ALERT_EMAIL`. Failures never go unnoticed.
+
+**Write-back idempotency**
+- `recordReminder` is keyed on `loanId:reminderDate`, so there is one row per loan per day.
+- `sent` is final; a later `failed` only refreshes the error.
+- Retried write-backs are accepted and reported as duplicates.
+- The overdue list skips loans already reminded today, so re-running the workflow is safe.
+
+**Loans**
+- A loan can always be marked returned, even after an admin removes the listing.
+- Overdue loans keep blocking new bookings until they are returned.
+
+## Decisions
+
+**Data and rules**
+- **Roles come from Clerk `publicMetadata`** through the JWT `metadata` claim, as in the reference project, rather than from a Convex table. Revoking access is one change in Clerk, and there's no role data to keep in sync.
+- **The profile row is created by a mutation** that the client calls after sign-in (`users.syncCurrentUser`), rather than by a Clerk webhook. That's one fewer public endpoint and secret. The signed-in UI waits for the row so queries never race it.
+- **Loan dates are UTC calendar days** (`YYYY-MM-DD`). The server allows a start of "yesterday UTC", so people west of UTC can pick their local today in the evening. The date picker uses the viewer's local day.
+- **Overdue is derived, not stored:** an approved loan whose end date has passed. There's no cron flipping statuses, and nothing can go stale.
+- **Approving a request declines other pending requests for overlapping dates**, and those borrowers are notified. Overlaps with approved loans are checked inside the same mutation, which runs as one transaction.
+- **Removing a listing is a soft delete,** so loan history survives. Open requests are declined and upcoming loans cancelled. Owners can't remove a tool that is out on loan; admins can, and the loan stays open until it is returned.
+
+**Automation**
+- **Outbox plus workpool** instead of calling n8n from the mutation: mutations stay fast and transactional, retries are durable, and every event's delivery state is visible (and shown on loans).
+- **Resend for email,** called from n8n through the HTTP Request node with a Header Auth credential, so the API key never appears in workflow JSON.
+- **n8n Variables hold the settings** (with an environment-variable fallback for self-hosted installs). Code nodes can't read credentials, and the HMAC secrets must be available to the Code nodes.
+- **Each direction has its own secret,** so compromising one doesn't let an attacker forge the other direction.
+- **Single-use signatures only on the overdue GET.** That's where a replay would leak data. Write-backs are idempotent, and n8n's Retry On Fail resends identical signatures, so they must stay accepted.
+
+**Errors and UI**
+- **`ConvexError({ code, message })`** instead of plain `Error`, which the reference project throws, so the UI can show friendly toasts.
+- **UI:** shadcn/ui (new-york), Tailwind v4, a small set of pages with server-provided action flags. There's no client-side business logic.
+
+## Assumptions and what is not verified end to end
+
+**Verified:**
+- by tests (130 total: Convex functions via `convex-test`, HTTP endpoints via `t.fetch`, and the exported n8n Code-node JavaScript run in Node):
+  - RBAC
+  - the state machine, overlap and date rules
+  - payload minimization
+  - signing and verification in both directions
+  - replay and staleness rejection
+  - idempotent write-back
+  - retry and failure handling
+- the production build, lint and typecheck, in CI.
+
+**Not verified against live services from here:**
+- n8n Cloud executing the imported workflows: that `require('crypto')`, `$vars`, Raw Body and `getBinaryDataBuffer` behave as expected on your plan and version.
+- Resend delivery.
+- A full browser session against Clerk with the `convex` JWT template.
+
+The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import) cover these.
+
+**Assumptions:**
+- **n8n Variables** are a paid-plan feature. The Cloud trial includes them; on plans without them, use environment variables (self-hosted) or add the values to a Set node and keep it out of exports.
+- **Resend sender:** with Resend's test sender (`onboarding@resend.dev`), mail only reaches the account owner's address until a domain is verified.
+- **Error workflow:** its link to the other workflows is instance-specific, so it is set by hand after import.
+
+## Running in production
+
+- **Convex:** run `npx convex deploy` to a production deployment and set the same env variables with `--prod`. Use a production Clerk instance and keys.
+- **Hosting:** host the app (e.g. on Vercel) with `APP_URL` set to the real domain.
+- **Email:** verify a sending domain in Resend and use it in `RESEND_FROM`.
+- **Secrets:**
+  - Rotate the two HMAC secrets periodically.
+  - To rotate without downtime, accept a list of active secrets during the overlap. Today a single secret is configured per direction.
+- **Scale:**
+  - Paginate `tools.list` and the loan boards. They load everything at neighborhood scale; admin lists are already paginated.
+  - Overdue reminders take 200 loans per run; schedule more frequent runs if the backlog grows.
+  - Consider a counter table for availability instead of a per-tool index read.
+- **Observability:**
+  - Ship Convex logs to a log service.
+  - Alert on `notificationOutbox` rows with status `failed`, and on Error-handler executions.
+  - Add a small dashboard of delivery and reminder outcomes.
+- **Abuse controls:**
+  - Rate-limit requests per user (e.g. with `@convex-dev/rate-limiter`).
+  - Add a report-listing flow for admins.
+- **Testing:** add Playwright end-to-end tests with `@clerk/testing` against a staging deployment.
+- **Moving off the n8n Cloud trial:**
+  - **Paid n8n Cloud** (check current plans and limits on n8n.io):
+    - No ops work: hosting, upgrades, backups and HTTPS webhooks are handled for you.
+    - Pro keeps Variables, more executions and longer execution history.
+    - The trade-offs are per-execution pricing, data stored with n8n (EU/US region choice), and less control over versions and limits.
+    - This is the natural next step for a small team.
+  - **Self-hosting** (Docker/Kubernetes with Postgres and queue mode):
+    - Lowest marginal cost and full data control: execution data and secrets stay in your infrastructure.
+    - You can pin versions.
+    - You take on TLS, backups, upgrades, scaling (Redis queue mode) and security patching.
+    - Variables are a licensed feature on self-hosted installs, so without a license use environment variables (the workflows already support this) or external secrets.
+    - Choose it when compliance or volume justifies the operational load.
+  - **Either way** the workflow JSON is unchanged. Re-create the credential and the five settings, re-link the error workflow, and update `N8N_REQUEST_WEBHOOK_URL`.
+
+## Project layout
+
+```
+src/
+  app/                    App Router pages: "/", sign-in/up, (app)/tools, /my/*, /admin
+  components/             UI by feature (tools/, loans/, admin/) + shadcn ui/
+  lib/                    client helpers (route rules, labels, dates, toasts)
+  proxy.ts                Clerk middleware: protects routes, admin redirect
+convex/
+  auth.ts                 shared authorization helpers (identity, roles, ownership)
+  schema.ts               tables and indexes
+  tools.ts loans.ts admin.ts users.ts   public functions
+  notifications.ts        outbox delivery to n8n (workpool action + onComplete)
+  reminders.ts http.ts    overdue list, idempotent write-back, signed HTTP endpoints
+  crons.ts                daily purge of used signatures
+  lib/                    hmac, loans state machine, availability, dates, validators
+  *.test.ts               convex-test specs
+n8n/
+  workflows/*.json        exported workflows (no credentials)
+  README.md               import guide and node-by-node configuration
+tests/unit/               route rules and n8n Code-node tests
+scripts/check-n8n-exports.mjs
+docker-compose.yml        optional local n8n
+```
+
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run dev` / `npx convex dev` | Run the app and sync Convex functions |
+| `npm run lint` / `npm run lint:fix` | Biome (ultracite) |
+| `npm run typecheck` | App, Convex and test tsconfigs |
+| `npm test` | Vitest: Convex specs and unit tests |
+| `npm run check:n8n` | Scan workflow exports for secrets and credential IDs |
+| `npm run build` | Production build |
