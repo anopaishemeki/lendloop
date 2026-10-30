@@ -18,7 +18,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:convex": "vitest run --project convex",
-    "test:unit": "vitest run --project unit"
+    "test:unit": "vitest run --project unit",
+    "check:n8n": "node scripts/check-n8n-exports.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.22",
