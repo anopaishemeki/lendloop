@@ -22,14 +22,24 @@ import {
   rangesOverlap,
   todayUtc,
 } from "./lib/dates";
-import { isOverdue, loansForTool, transitionLoan } from "./lib/loans";
+import {
+  blockedRange,
+  isOverdue,
+  loansForTool,
+  transitionLoan,
+} from "./lib/loans";
 import { cleanText } from "./lib/text";
+import { publicProfile, userLoader } from "./lib/users";
 import {
   LOAN_MAX_ADVANCE_DAYS,
   LOAN_MAX_DAYS,
   LOAN_NOTE_MAX,
+  type LoanStatus,
   loanStatusValidator,
 } from "./lib/validators";
+
+const HISTORY_LIMIT = 50;
+const CLOSED_STATUSES = ["returned", "declined", "cancelled"] as const;
 
 const loanView = v.object({
   _creationTime: v.number(),
@@ -57,10 +67,6 @@ const loanView = v.object({
 
 export type LoanView = typeof loanView.type;
 
-function firstName(name: string) {
-  return name.split(" ")[0] || name;
-}
-
 /** What the viewer may do next; mirrors the checks in the mutations below. */
 function allowedActions(viewer: Viewer, loan: Doc<"loans">, today: string) {
   const isOwner = isSelf(viewer, loan.ownerId);
@@ -78,20 +84,18 @@ function allowedActions(viewer: Viewer, loan: Doc<"loans">, today: string) {
 
 function viewBuilder(ctx: QueryCtx, viewer: Viewer) {
   const today = todayUtc();
+  const userOf = userLoader(ctx, viewer.user);
   return async (loan: Doc<"loans">): Promise<LoanView> => {
     const role = isSelf(viewer, loan.ownerId) ? "owner" : "borrower";
     const [tool, counterpart] = await Promise.all([
       ctx.db.get(loan.toolId),
-      ctx.db.get(role === "owner" ? loan.borrowerId : loan.ownerId),
+      userOf(role === "owner" ? loan.borrowerId : loan.ownerId),
     ]);
     return {
       _creationTime: loan._creationTime,
       _id: loan._id,
       ...allowedActions(viewer, loan, today),
-      counterpart: {
-        firstName: counterpart ? firstName(counterpart.name) : "Neighbor",
-        isTrustedLender: counterpart?.isTrustedLender ?? false,
-      },
+      counterpart: publicProfile(counterpart),
       endDate: loan.endDate,
       isOverdue: isOverdue(loan, today),
       note: loan.note,
@@ -112,7 +116,9 @@ function validateRange(range: DateRange, today: string) {
   if (!(isIsoDate(startDate) && isIsoDate(endDate))) {
     fail("INVALID_ARGUMENT", "Dates must be valid calendar days.");
   }
-  if (startDate < today) {
+  // Dates are UTC days; one day of slack lets people west of UTC pick their
+  // local "today" in the evening.
+  if (startDate < addDays(today, -1)) {
     fail("INVALID_ARGUMENT", "The loan can't start in the past.");
   }
   if (endDate < startDate) {
@@ -135,8 +141,13 @@ async function assertNoApprovedOverlap(
   range: DateRange,
   ignore?: Id<"loans">
 ) {
+  const today = todayUtc();
   const approved = await loansForTool(ctx, toolId, "approved");
-  if (approved.some((l) => l._id !== ignore && rangesOverlap(l, range))) {
+  const clash = approved.some(
+    (loan) =>
+      loan._id !== ignore && rangesOverlap(blockedRange(loan, today), range)
+  );
+  if (clash) {
     fail("CONFLICT", "The tool is already lent out for some of those dates.");
   }
 }
@@ -145,6 +156,33 @@ async function loadLoan(ctx: MutationCtx, loanId: Id<"loans">) {
   const loan = await ctx.db.get(loanId);
   if (!loan) fail("NOT_FOUND", "That request no longer exists.");
   return loan;
+}
+
+/**
+ * Open loans are always returned in full so none can drop off the board; only
+ * closed history is capped.
+ */
+async function loansForParty(
+  ctx: QueryCtx,
+  index: "by_owner_and_status" | "by_borrower_and_status",
+  userId: Id<"users">
+) {
+  const field = index === "by_owner_and_status" ? "ownerId" : "borrowerId";
+  const byStatus = (status: LoanStatus) =>
+    ctx.db
+      .query("loans")
+      .withIndex(index, (q) => q.eq(field, userId).eq("status", status))
+      .order("desc");
+  const [requested, approved, ...closed] = await Promise.all([
+    byStatus("requested").collect(),
+    byStatus("approved").collect(),
+    ...CLOSED_STATUSES.map((status) => byStatus(status).take(HISTORY_LIMIT)),
+  ]);
+  const history = closed
+    .flat()
+    .sort((a, b) => b._creationTime - a._creationTime)
+    .slice(0, HISTORY_LIMIT);
+  return [...requested, ...approved, ...history];
 }
 
 export const request = mutation({
@@ -190,6 +228,7 @@ export const request = mutation({
   returns: v.id("loans"),
 });
 
+/** Approving also declines other pending requests for overlapping dates. */
 export const approve = mutation({
   args: { loanId: v.id("loans") },
   handler: async (ctx, { loanId }) => {
@@ -207,7 +246,15 @@ export const approve = mutation({
       fail("CONFLICT", "This tool is no longer listed.");
     }
     await assertNoApprovedOverlap(ctx, loan.toolId, loan, loan._id);
-    await transitionLoan(ctx, loan, "approved");
+
+    const now = Date.now();
+    await transitionLoan(ctx, loan, "approved", now);
+    const pending = await loansForTool(ctx, loan.toolId, "requested");
+    await Promise.all(
+      pending
+        .filter((other) => rangesOverlap(other, loan))
+        .map((other) => transitionLoan(ctx, other, "declined", now))
+    );
     return null;
   },
   returns: v.null(),
@@ -273,11 +320,11 @@ export const listMyRequests = query({
   args: {},
   handler: async (ctx) => {
     const viewer = await requireViewer(ctx);
-    const loans = await ctx.db
-      .query("loans")
-      .withIndex("by_borrower", (q) => q.eq("borrowerId", viewer.user._id))
-      .order("desc")
-      .take(200);
+    const loans = await loansForParty(
+      ctx,
+      "by_borrower_and_status",
+      viewer.user._id
+    );
     return await Promise.all(loans.map(viewBuilder(ctx, viewer)));
   },
   returns: v.array(loanView),
@@ -287,11 +334,11 @@ export const listIncoming = query({
   args: {},
   handler: async (ctx) => {
     const viewer = await requireViewer(ctx);
-    const loans = await ctx.db
-      .query("loans")
-      .withIndex("by_owner", (q) => q.eq("ownerId", viewer.user._id))
-      .order("desc")
-      .take(200);
+    const loans = await loansForParty(
+      ctx,
+      "by_owner_and_status",
+      viewer.user._id
+    );
     return await Promise.all(loans.map(viewBuilder(ctx, viewer)));
   },
   returns: v.array(loanView),
@@ -305,8 +352,8 @@ export const bookedRanges = query({
     const today = todayUtc();
     const approved = await loansForTool(ctx, toolId, "approved");
     return approved
-      .filter((loan) => loan.endDate >= today || isOnLoan(loan, today))
-      .map(({ startDate, endDate }) => ({ endDate, startDate }))
+      .map((loan) => blockedRange(loan, today))
+      .filter((range) => range.endDate >= today)
       .sort((a, b) => a.startDate.localeCompare(b.startDate));
   },
   returns: v.array(v.object({ endDate: v.string(), startDate: v.string() })),

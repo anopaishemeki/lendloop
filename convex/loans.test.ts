@@ -109,7 +109,7 @@ describe("loans.request", () => {
 
   test.each([
     ["an invalid day", "2026-02-30", "2026-03-01", /valid calendar/u],
-    ["a past start", day(-1), day(1), /past/u],
+    ["a past start", day(-2), day(1), /past/u],
     ["an end before start", day(3), day(2), /on or after/u],
     ["more than 30 days", day(1), day(31), /at most 30/u],
     ["too far ahead", day(181), day(182), /180 days/u],
@@ -131,6 +131,24 @@ describe("loans.request", () => {
     await expect(requestFor(s, day(6), day(7))).resolves.toBeDefined();
   });
 
+  test("an overdue loan keeps blocking dates until it is returned", async () => {
+    const s = await setup();
+    await seedLoan(s, {
+      endDate: day(-3),
+      startDate: day(-5),
+      status: "approved",
+    });
+    await expect(requestFor(s, today, day(1))).rejects.toThrow(/already lent/u);
+    await expect(
+      s.other.caller.query(api.loans.bookedRanges, { toolId: s.toolId })
+    ).resolves.toEqual([{ endDate: today, startDate: day(-5) }]);
+  });
+
+  test("accepts yesterday's UTC date for viewers west of UTC", async () => {
+    const s = await setup();
+    await expect(requestFor(s, day(-1), day(1))).resolves.toBeDefined();
+  });
+
   test("rejects a duplicate pending request from the same borrower", async () => {
     const s = await setup();
     await requestFor(s);
@@ -145,6 +163,24 @@ describe("loans.request", () => {
 });
 
 describe("approve and decline", () => {
+  test("approving declines other pending requests for overlapping dates", async () => {
+    const s = await setup();
+    const chosen = await requestFor(s, day(1), day(3));
+    const clashing = await s.other.caller.mutation(api.loans.request, {
+      endDate: day(4),
+      startDate: day(3),
+      toolId: s.toolId,
+    });
+    const later = await s.other.caller.mutation(api.loans.request, {
+      endDate: day(9),
+      startDate: day(8),
+      toolId: s.toolId,
+    });
+    await s.owner.caller.mutation(api.loans.approve, { loanId: chosen });
+    expect(await statusOf(s.t, clashing)).toBe("declined");
+    expect(await statusOf(s.t, later)).toBe("requested");
+  });
+
   test("only the tool owner can decide", async () => {
     const s = await setup();
     const loanId = await requestFor(s);
