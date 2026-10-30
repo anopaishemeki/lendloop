@@ -1,9 +1,10 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { fail } from "../auth";
+import { enqueueNotification } from "../notifications";
 import { isOnLoan } from "./availability";
 import type { DateRange } from "./dates";
-import type { LoanStatus } from "./validators";
+import type { LoanStatus, NotificationEvent } from "./validators";
 
 const TRANSITIONS: Record<LoanStatus, readonly LoanStatus[]> = {
   approved: ["returned", "cancelled"],
@@ -52,12 +53,36 @@ export function canTransition(from: LoanStatus, to: LoanStatus): boolean {
   return TRANSITIONS[from].includes(to);
 }
 
-/** The single place a loan changes status, so every change is validated the same way. */
+const EVENTS: Partial<Record<LoanStatus, NotificationEvent>> = {
+  approved: "request.approved",
+  cancelled: "request.cancelled",
+  declined: "request.declined",
+  returned: "loan.returned",
+};
+
+/**
+ * Who hears about a change: the borrower, except when the borrower cancelled,
+ * in which case the owner does. System changes (no actor) go to the borrower.
+ */
+function recipientOf(
+  loan: Doc<"loans">,
+  to: LoanStatus,
+  actorId?: Id<"users">
+): Id<"users"> {
+  return to === "cancelled" && actorId === loan.borrowerId
+    ? loan.ownerId
+    : loan.borrowerId;
+}
+
+/**
+ * The single place a loan changes status, so every change is validated the
+ * same way and emits exactly one notification event.
+ */
 export async function transitionLoan(
   ctx: MutationCtx,
   loan: Doc<"loans">,
   to: LoanStatus,
-  now = Date.now()
+  { actorId, now = Date.now() }: { actorId?: Id<"users">; now?: number } = {}
 ): Promise<void> {
   if (!canTransition(loan.status, to)) {
     fail("INVALID_TRANSITION", `A ${loan.status} loan cannot become ${to}.`);
@@ -66,4 +91,13 @@ export async function transitionLoan(
     status: to,
     ...(to === "returned" ? { returnedAt: now } : { decidedAt: now }),
   });
+  const event = EVENTS[to];
+  if (event) {
+    await enqueueNotification(
+      ctx,
+      loan._id,
+      event,
+      recipientOf(loan, to, actorId)
+    );
+  }
 }
