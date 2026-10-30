@@ -2,7 +2,6 @@
 
 import { useMutation, useQuery } from "convex/react";
 import { type FormEvent, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,11 +16,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatRange, localTodayIso } from "@/lib/dates";
-import { errorMessage } from "@/lib/errors";
+import { useToastAction } from "@/lib/use-toast-action";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { addDays } from "../../../convex/lib/dates";
 import { LOAN_MAX_DAYS, LOAN_NOTE_MAX } from "../../../convex/lib/validators";
+
+function latestEndFor(start: string) {
+  return start ? addDays(start, LOAN_MAX_DAYS - 1) : undefined;
+}
 
 function BookedDates({ toolId }: { toolId: Id<"tools"> }) {
   const booked = useQuery(api.loans.bookedRanges, { toolId });
@@ -52,15 +55,13 @@ export function RequestDialog({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [note, setNote] = useState("");
-  const [pending, setPending] = useState(false);
+  const { pending, run } = useToastAction();
   const today = localTodayIso();
-  const latestEnd = startDate
-    ? addDays(startDate, LOAN_MAX_DAYS - 1)
-    : undefined;
+  const latestEnd = latestEndFor(startDate);
 
   const changeStart = (value: string) => {
     setStartDate(value);
-    const latest = value ? addDays(value, LOAN_MAX_DAYS - 1) : undefined;
+    const latest = latestEndFor(value);
     if (endDate && (endDate < value || (latest && endDate > latest))) {
       setEndDate("");
     }
@@ -68,18 +69,15 @@ export function RequestDialog({
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    setPending(true);
-    try {
-      await request({ endDate, note: note || undefined, startDate, toolId });
-      toast.success("Request sent. Track it under My requests.");
+    const sent = await run(
+      () => request({ endDate, note: note || undefined, startDate, toolId }),
+      "Request sent. Track it under My requests."
+    );
+    if (sent) {
       setOpen(false);
       setStartDate("");
       setEndDate("");
       setNote("");
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setPending(false);
     }
   };
 

@@ -2,10 +2,8 @@
 
 import { useMutation } from "convex/react";
 import type { FunctionReference } from "convex/server";
-import { useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { errorMessage } from "@/lib/errors";
+import { useToastAction } from "@/lib/use-toast-action";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { LoanView } from "./types";
@@ -30,25 +28,13 @@ function ActionButton({
   success: string;
   variant?: "default" | "outline" | "ghost";
 }) {
-  const run = useMutation(mutation);
-  const [pending, setPending] = useState(false);
-
-  const handleClick = async () => {
-    setPending(true);
-    try {
-      await run({ loanId });
-      toast.success(success);
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setPending(false);
-    }
-  };
+  const runMutation = useMutation(mutation);
+  const { pending, run } = useToastAction();
 
   return (
     <Button
       disabled={pending}
-      onClick={handleClick}
+      onClick={() => run(() => runMutation({ loanId }), success)}
       size="sm"
       variant={variant}
     >
