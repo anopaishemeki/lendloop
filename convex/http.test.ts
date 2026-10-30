@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { addDays, todayUtc } from "./lib/dates";
 import { signRequest, verifyRequest } from "./lib/hmac";
@@ -42,13 +42,14 @@ async function setup() {
     t.run((ctx) =>
       ctx.db.insert("loans", { borrowerId, ownerId, toolId, ...fields })
     );
-  return { loan, t };
+  const overdueLoan = () =>
+    loan({ endDate: day(-2), startDate: day(-5), status: "approved" });
+  return { loan, overdueLoan, t };
 }
 
 type T = Awaited<ReturnType<typeof setup>>["t"];
 
-async function signedFetch(
-  t: T,
+async function sign(
   method: "GET" | "POST",
   path: string,
   body = "",
@@ -59,25 +60,42 @@ async function signedFetch(
     { body, method, path },
     nowMs
   );
+  return {
+    "content-type": "application/json",
+    "x-lendloop-signature": signature,
+    "x-lendloop-timestamp": timestamp,
+  };
+}
+
+async function signedFetch(
+  t: T,
+  method: "GET" | "POST",
+  path: string,
+  body = "",
+  options: { secret?: string; nowMs?: number } = {}
+) {
   return await t.fetch(path, {
     body: method === "POST" ? body : undefined,
-    headers: {
-      "content-type": "application/json",
-      "x-lendloop-signature": signature,
-      "x-lendloop-timestamp": timestamp,
-    },
+    headers: await sign(method, path, body, options),
     method,
   });
 }
 
-function reminderBody(loanId: Id<"loans">, status: "sent" | "failed") {
+function outcome(
+  loanId: Id<"loans">,
+  status: "sent" | "failed",
+  error?: string
+) {
   return JSON.stringify({
-    idempotencyKey: `${loanId}:${today}`,
     loanId,
     reminderDate: today,
     status,
-    ...(status === "failed" ? { error: "Resend 503" } : {}),
+    ...(error ? { error } : {}),
   });
+}
+
+function writeBack(t: T, body: string) {
+  return signedFetch(t, "POST", "/n8n/reminders", body);
 }
 
 function reminderRows(t: T) {
@@ -86,12 +104,8 @@ function reminderRows(t: T) {
 
 describe("GET /n8n/overdue-loans", () => {
   test("returns only overdue approved loans, minimized and signed", async () => {
-    const { loan, t } = await setup();
-    const overdue = await loan({
-      endDate: day(-2),
-      startDate: day(-5),
-      status: "approved",
-    });
+    const { loan, overdueLoan, t } = await setup();
+    const overdue = await overdueLoan();
     await loan({ endDate: day(2), startDate: day(-1), status: "approved" });
     await loan({ endDate: day(-2), startDate: day(-5), status: "returned" });
 
@@ -109,39 +123,34 @@ describe("GET /n8n/overdue-loans", () => {
       })
     ).toEqual({ ok: true });
 
-    const data = JSON.parse(body);
-    expect(data.reminderDate).toBe(today);
-    expect(data.loans).toEqual([
-      {
-        appUrl: "https://lendloop.example/my/requests",
-        borrower: { email: "ben@example.test", firstName: "ben" },
-        daysOverdue: 2,
-        dueDate: day(-2),
-        idempotencyKey: `${overdue}:${today}`,
-        loanId: overdue,
-        ownerFirstName: "olive",
-        reminderDate: today,
-        toolName: "Drill",
-      },
-    ]);
+    expect(JSON.parse(body)).toEqual({
+      appUrl: "https://lendloop.example/my/requests",
+      loans: [
+        {
+          borrower: { email: "ben@example.test", firstName: "ben" },
+          daysOverdue: 2,
+          dueDate: day(-2),
+          idempotencyKey: `${overdue}:${today}`,
+          loanId: overdue,
+          ownerFirstName: "olive",
+          toolName: "Drill",
+        },
+      ],
+      reminderDate: today,
+    });
     expect(body).not.toContain("olive@example.test");
   });
 
-  test("skips loans already reminded today", async () => {
-    const { loan, t } = await setup();
-    const overdue = await loan({
-      endDate: day(-1),
-      startDate: day(-3),
-      status: "approved",
-    });
-    await signedFetch(
-      t,
-      "POST",
-      "/n8n/reminders",
-      reminderBody(overdue, "sent")
-    );
+  test("skips loans already reminded today but retries failed ones", async () => {
+    const { overdueLoan, t } = await setup();
+    const reminded = await overdueLoan();
+    const failed = await overdueLoan();
+    await writeBack(t, outcome(reminded, "sent"));
+    await writeBack(t, outcome(failed, "failed", "Resend 503"));
+
     const response = await signedFetch(t, "GET", "/n8n/overdue-loans");
-    expect((await response.json()).loans).toEqual([]);
+    const { loans } = await response.json();
+    expect(loans.map((l: { loanId: string }) => l.loanId)).toEqual([failed]);
   });
 
   test.each([
@@ -162,23 +171,21 @@ describe("GET /n8n/overdue-loans", () => {
     ],
     [
       "a signature for another endpoint",
-      async (t: T) => {
-        const { signature, timestamp } = await signRequest(SECRET, {
-          body: "",
-          method: "GET",
-          path: "/n8n/reminders",
-        });
-        return await t.fetch("/n8n/overdue-loans", {
-          headers: {
-            "x-lendloop-signature": signature,
-            "x-lendloop-timestamp": timestamp,
-          },
-        });
-      },
+      async (t: T) =>
+        await t.fetch("/n8n/overdue-loans", {
+          headers: await sign("GET", "/n8n/reminders"),
+        }),
     ],
   ])("rejects %s with 401", async (_label, call) => {
     const { t } = await setup();
     expect((await call(t)).status).toBe(401);
+  });
+
+  test("rejects a replay of an accepted request", async () => {
+    const { t } = await setup();
+    const headers = await sign("GET", "/n8n/overdue-loans");
+    expect((await t.fetch("/n8n/overdue-loans", { headers })).status).toBe(200);
+    expect((await t.fetch("/n8n/overdue-loans", { headers })).status).toBe(401);
   });
 
   test("fails closed without a configured secret", async () => {
@@ -192,117 +199,110 @@ describe("GET /n8n/overdue-loans", () => {
 
 describe("POST /n8n/reminders", () => {
   test("is idempotent per loan and day", async () => {
-    const { loan, t } = await setup();
-    const loanId = await loan({
-      endDate: day(-1),
-      startDate: day(-3),
-      status: "approved",
+    const { overdueLoan, t } = await setup();
+    const body = outcome(await overdueLoan(), "sent");
+    expect(await (await writeBack(t, body)).json()).toEqual({
+      result: "created",
     });
-    const body = reminderBody(loanId, "sent");
-    const first = await signedFetch(t, "POST", "/n8n/reminders", body);
-    const retry = await signedFetch(t, "POST", "/n8n/reminders", body);
-    expect(await first.json()).toEqual({ result: "created" });
-    expect(await retry.json()).toEqual({ result: "duplicate" });
-    expect(await reminderRows(t)).toHaveLength(1);
+    expect(await (await writeBack(t, body)).json()).toEqual({
+      result: "duplicate",
+    });
+    const rows = await reminderRows(t);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.idempotencyKey).toBe(`${rows[0]?.loanId}:${today}`);
   });
 
-  test("a later success upgrades a failed attempt, never the reverse", async () => {
-    const { loan, t } = await setup();
-    const loanId = await loan({
-      endDate: day(-1),
-      startDate: day(-3),
-      status: "approved",
+  test("a later failure refreshes the error; success is final", async () => {
+    const { overdueLoan, t } = await setup();
+    const loanId = await overdueLoan();
+    await writeBack(t, outcome(loanId, "failed", "first error"));
+    await writeBack(t, outcome(loanId, "failed", "second error"));
+    expect((await reminderRows(t))[0]).toMatchObject({
+      error: "second error",
+      status: "failed",
     });
-    await signedFetch(
-      t,
-      "POST",
-      "/n8n/reminders",
-      reminderBody(loanId, "failed")
-    );
-    const upgraded = await signedFetch(
-      t,
-      "POST",
-      "/n8n/reminders",
-      reminderBody(loanId, "sent")
-    );
-    expect(await upgraded.json()).toEqual({ result: "updated" });
-    await signedFetch(
-      t,
-      "POST",
-      "/n8n/reminders",
-      reminderBody(loanId, "failed")
-    );
+
+    await writeBack(t, outcome(loanId, "sent"));
+    await writeBack(t, outcome(loanId, "failed", "late error"));
     const [row] = await reminderRows(t);
     expect(row).toMatchObject({ status: "sent" });
     expect(row?.error).toBeUndefined();
   });
 
   test("rejects a tampered body", async () => {
-    const { loan, t } = await setup();
-    const loanId = await loan({
-      endDate: day(-1),
-      startDate: day(-3),
-      status: "approved",
-    });
-    const body = reminderBody(loanId, "failed");
-    const { signature, timestamp } = await signRequest(SECRET, {
-      body,
-      method: "POST",
-      path: "/n8n/reminders",
-    });
+    const { overdueLoan, t } = await setup();
+    const body = outcome(await overdueLoan(), "failed", "x");
     const response = await t.fetch("/n8n/reminders", {
       body: body.replace("failed", "sent"),
-      headers: {
-        "x-lendloop-signature": signature,
-        "x-lendloop-timestamp": timestamp,
-      },
+      headers: await sign("POST", "/n8n/reminders", body),
       method: "POST",
     });
     expect(response.status).toBe(401);
     expect(await reminderRows(t)).toEqual([]);
   });
 
+  test("rejects oversized bodies before verifying them", async () => {
+    const { t } = await setup();
+    const body = JSON.stringify({ padding: "é".repeat(6000) });
+    const response = await writeBack(t, body);
+    expect(response.status).toBe(413);
+  });
+
   test.each([
     ["invalid json", () => "{not json"],
     [
       "an unknown status",
-      (id: string) =>
-        reminderBody(id as Id<"loans">, "sent").replace('"sent"', '"maybe"'),
+      (id: Id<"loans">) => outcome(id, "sent").replace('"sent"', '"maybe"'),
     ],
     [
-      "a key that doesn't match the loan and date",
-      (id: string) =>
+      "an unexpected field",
+      (id: Id<"loans">) =>
         JSON.stringify({
-          idempotencyKey: `${id}:2000-01-01`,
+          extra: 1,
           loanId: id,
           reminderDate: today,
           status: "sent",
         }),
     ],
     [
-      "an unknown loan id",
-      () =>
+      "an invalid date",
+      (id: Id<"loans">) =>
         JSON.stringify({
-          idempotencyKey: `nope:${today}`,
-          loanId: "nope",
-          reminderDate: today,
+          loanId: id,
+          reminderDate: "2026-02-30",
           status: "sent",
         }),
     ],
+    [
+      "an unknown loan id",
+      () =>
+        JSON.stringify({ loanId: "nope", reminderDate: today, status: "sent" }),
+    ],
   ])("rejects %s with 400", async (_label, makeBody) => {
-    const { loan, t } = await setup();
-    const loanId = await loan({
-      endDate: day(-1),
-      startDate: day(-3),
-      status: "approved",
-    });
-    const response = await signedFetch(
-      t,
-      "POST",
-      "/n8n/reminders",
-      makeBody(loanId)
-    );
+    const { overdueLoan, t } = await setup();
+    const response = await writeBack(t, makeBody(await overdueLoan()));
     expect(response.status).toBe(400);
     expect(await reminderRows(t)).toEqual([]);
+  });
+});
+
+describe("purgeUsedSignatures", () => {
+  test("removes only expired entries", async () => {
+    const { t } = await setup();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("usedSignatures", {
+        expiresAt: Date.now() - 1,
+        signature: "old",
+      });
+      await ctx.db.insert("usedSignatures", {
+        expiresAt: Date.now() + 60_000,
+        signature: "new",
+      });
+    });
+    expect(await t.mutation(internal.reminders.purgeUsedSignatures, {})).toBe(
+      1
+    );
+    const left = await t.run((ctx) => ctx.db.query("usedSignatures").collect());
+    expect(left.map((row) => row.signature)).toEqual(["new"]);
   });
 });
