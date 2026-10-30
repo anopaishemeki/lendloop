@@ -3,6 +3,7 @@
 import { useQuery } from "convex/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { RequestDialog } from "@/components/loans/request-dialog";
 import { PageHeader } from "@/components/page-header";
 import { CategoryFilter } from "@/components/tools/category-filter";
 import { ListToolButton } from "@/components/tools/list-tool-button";
@@ -33,6 +34,11 @@ function ToolBrowser() {
     <>
       <CategoryFilter onChange={setCategory} value={category} />
       <ToolGrid
+        actions={(tool) =>
+          tool.isMine ? null : (
+            <RequestDialog toolId={tool._id} toolName={tool.name} />
+          )
+        }
         emptyHint="Be the first to lend something in this category."
         emptyTitle="No tools here yet"
         tools={tools}

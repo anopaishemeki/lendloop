@@ -22,8 +22,8 @@ export default defineSchema({
     status: loanStatusValidator,
     toolId: v.id("tools"),
   })
-    .index("by_borrower", ["borrowerId"])
-    .index("by_owner", ["ownerId"])
+    .index("by_borrower_and_status", ["borrowerId", "status"])
+    .index("by_owner_and_status", ["ownerId", "status"])
     .index("by_status_and_end_date", ["status", "endDate"])
     .index("by_tool_and_status_and_start_date", [
       "toolId",

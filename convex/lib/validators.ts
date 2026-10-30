@@ -16,6 +16,10 @@ export const TOOL_NAME_MIN = 2;
 export const TOOL_NAME_MAX = 80;
 export const TOOL_DESCRIPTION_MAX = 500;
 
+export const LOAN_MAX_DAYS = 30;
+export const LOAN_MAX_ADVANCE_DAYS = 180;
+export const LOAN_NOTE_MAX = 300;
+
 export const LOAN_STATUSES = [
   "requested",
   "approved",

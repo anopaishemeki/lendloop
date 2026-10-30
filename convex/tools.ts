@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
 import { mutation, type QueryCtx, query } from "./_generated/server";
 import {
   assertToolOwner,
@@ -15,8 +15,10 @@ import {
   isOnLoan,
 } from "./lib/availability";
 import { todayUtc } from "./lib/dates";
-import { transitionLoan } from "./lib/loans";
+import { cachedGet, getActiveTool } from "./lib/db";
+import { loansForTool, transitionLoan } from "./lib/loans";
 import { cleanText } from "./lib/text";
+import { publicProfile } from "./lib/users";
 import {
   categoryValidator,
   conditionValidator,
@@ -51,10 +53,6 @@ const publicToolView = v.object({
   name: v.string(),
 });
 
-function firstName(name: string) {
-  return name.split(" ")[0] || name;
-}
-
 function cleanFields(args: { name: string; description: string }) {
   return {
     description: cleanText(
@@ -70,21 +68,11 @@ function cleanFields(args: { name: string; description: string }) {
 /** Builds card views, loading each owner once per query instead of once per tool. */
 function viewBuilder(ctx: QueryCtx, viewer: Viewer) {
   const today = todayUtc();
-  const owners = new Map<Id<"users">, Promise<Doc<"users"> | null>>([
-    [viewer.user._id, Promise.resolve(viewer.user)],
-  ]);
-  const ownerOf = (id: Id<"users">) => {
-    let owner = owners.get(id);
-    if (!owner) {
-      owner = ctx.db.get(id);
-      owners.set(id, owner);
-    }
-    return owner;
-  };
+  const get = cachedGet(ctx, viewer.user);
 
   return async (tool: Doc<"tools">) => {
     const [owner, availability] = await Promise.all([
-      ownerOf(tool.ownerId),
+      get(tool.ownerId),
       availabilityOf(ctx, tool._id, today),
     ]);
     return {
@@ -95,20 +83,9 @@ function viewBuilder(ctx: QueryCtx, viewer: Viewer) {
       description: tool.description,
       isMine: isSelf(viewer, tool.ownerId),
       name: tool.name,
-      owner: {
-        firstName: owner ? firstName(owner.name) : "Neighbor",
-        isTrustedLender: owner?.isTrustedLender ?? false,
-      },
+      owner: publicProfile(owner),
     };
   };
-}
-
-async function getActiveTool(ctx: QueryCtx, toolId: Id<"tools">) {
-  const tool = await ctx.db.get(toolId);
-  if (!tool || tool.removedAt !== undefined) {
-    fail("NOT_FOUND", "That tool is no longer listed.");
-  }
-  return tool;
 }
 
 /**
@@ -225,19 +202,6 @@ export const update = mutation({
   returns: v.null(),
 });
 
-function openLoans(
-  ctx: QueryCtx,
-  toolId: Id<"tools">,
-  status: "requested" | "approved"
-) {
-  return ctx.db
-    .query("loans")
-    .withIndex("by_tool_and_status_and_start_date", (q) =>
-      q.eq("toolId", toolId).eq("status", status)
-    )
-    .collect();
-}
-
 /**
  * Soft delete so loan history survives. Open requests are declined and
  * upcoming approved loans cancelled. A tool that is currently out can only be
@@ -253,8 +217,8 @@ export const remove = mutation({
     const today = todayUtc();
     const now = Date.now();
     const [requested, approved] = await Promise.all([
-      openLoans(ctx, toolId, "requested"),
-      openLoans(ctx, toolId, "approved"),
+      loansForTool(ctx, toolId, "requested"),
+      loansForTool(ctx, toolId, "approved"),
     ]);
     if (
       viewer.role !== "admin" &&
