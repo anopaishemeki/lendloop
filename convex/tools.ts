@@ -15,7 +15,7 @@ import {
   isOnLoan,
 } from "./lib/availability";
 import { todayUtc } from "./lib/dates";
-import { transitionLoan } from "./lib/loans";
+import { loansForTool, transitionLoan } from "./lib/loans";
 import { cleanText } from "./lib/text";
 import {
   categoryValidator,
@@ -225,19 +225,6 @@ export const update = mutation({
   returns: v.null(),
 });
 
-function openLoans(
-  ctx: QueryCtx,
-  toolId: Id<"tools">,
-  status: "requested" | "approved"
-) {
-  return ctx.db
-    .query("loans")
-    .withIndex("by_tool_and_status_and_start_date", (q) =>
-      q.eq("toolId", toolId).eq("status", status)
-    )
-    .collect();
-}
-
 /**
  * Soft delete so loan history survives. Open requests are declined and
  * upcoming approved loans cancelled. A tool that is currently out can only be
@@ -253,8 +240,8 @@ export const remove = mutation({
     const today = todayUtc();
     const now = Date.now();
     const [requested, approved] = await Promise.all([
-      openLoans(ctx, toolId, "requested"),
-      openLoans(ctx, toolId, "approved"),
+      loansForTool(ctx, toolId, "requested"),
+      loansForTool(ctx, toolId, "approved"),
     ]);
     if (
       viewer.role !== "admin" &&

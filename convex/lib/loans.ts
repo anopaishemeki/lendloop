@@ -1,5 +1,5 @@
-import type { Doc } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { fail } from "../auth";
 import type { LoanStatus } from "./validators";
 
@@ -10,6 +10,26 @@ const TRANSITIONS: Record<LoanStatus, readonly LoanStatus[]> = {
   requested: ["approved", "declined", "cancelled"],
   returned: [],
 };
+
+export function loansForTool(
+  ctx: QueryCtx,
+  toolId: Id<"tools">,
+  status: "requested" | "approved"
+) {
+  return ctx.db
+    .query("loans")
+    .withIndex("by_tool_and_status_and_start_date", (q) =>
+      q.eq("toolId", toolId).eq("status", status)
+    )
+    .collect();
+}
+
+export function isOverdue(
+  loan: Pick<Doc<"loans">, "status" | "endDate">,
+  today: string
+): boolean {
+  return loan.status === "approved" && loan.endDate < today;
+}
 
 export function canTransition(from: LoanStatus, to: LoanStatus): boolean {
   return TRANSITIONS[from].includes(to);
