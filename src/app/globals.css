@@ -3,55 +3,63 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * LendLoop theme: a warm "neighborhood library" look. Paper background, ink
+ * text, forest green for primary actions, terracotta as the accent. Headings
+ * use Fraunces (serif), everything else Geist.
+ */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.99 0.004 95);
-  --foreground: oklch(0.22 0.02 160);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.02 160);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.02 160);
-  --primary: oklch(0.48 0.11 160);
-  --primary-foreground: oklch(0.985 0.005 160);
-  --secondary: oklch(0.95 0.015 150);
-  --secondary-foreground: oklch(0.28 0.04 160);
-  --muted: oklch(0.96 0.008 120);
-  --muted-foreground: oklch(0.5 0.02 160);
-  --accent: oklch(0.93 0.04 85);
-  --accent-foreground: oklch(0.3 0.05 70);
-  --destructive: oklch(0.58 0.22 27);
-  --success: oklch(0.55 0.13 150);
-  --warning: oklch(0.72 0.15 70);
-  --border: oklch(0.91 0.01 120);
-  --input: oklch(0.91 0.01 120);
-  --ring: oklch(0.48 0.11 160);
+  --radius: 0.75rem;
+  --background: oklch(0.982 0.009 85);
+  --foreground: oklch(0.255 0.022 60);
+  --card: oklch(0.996 0.004 85);
+  --card-foreground: oklch(0.255 0.022 60);
+  --popover: oklch(0.996 0.004 85);
+  --popover-foreground: oklch(0.255 0.022 60);
+  --primary: oklch(0.44 0.085 158);
+  --primary-foreground: oklch(0.985 0.01 90);
+  --secondary: oklch(0.945 0.02 150);
+  --secondary-foreground: oklch(0.32 0.06 158);
+  --muted: oklch(0.955 0.013 82);
+  --muted-foreground: oklch(0.5 0.02 65);
+  --accent: oklch(0.93 0.035 55);
+  --accent-foreground: oklch(0.42 0.1 40);
+  --terracotta: oklch(0.62 0.135 42);
+  --destructive: oklch(0.56 0.2 27);
+  --success: oklch(0.52 0.12 152);
+  --warning: oklch(0.7 0.14 72);
+  --border: oklch(0.895 0.016 80);
+  --input: oklch(0.87 0.018 80);
+  --ring: oklch(0.44 0.085 158);
 }
 
 .dark {
-  --background: oklch(0.17 0.012 160);
-  --foreground: oklch(0.96 0.006 120);
-  --card: oklch(0.21 0.014 160);
-  --card-foreground: oklch(0.96 0.006 120);
-  --popover: oklch(0.21 0.014 160);
-  --popover-foreground: oklch(0.96 0.006 120);
-  --primary: oklch(0.72 0.12 160);
-  --primary-foreground: oklch(0.18 0.03 160);
-  --secondary: oklch(0.27 0.02 160);
-  --secondary-foreground: oklch(0.95 0.01 120);
-  --muted: oklch(0.26 0.015 160);
-  --muted-foreground: oklch(0.72 0.015 140);
-  --accent: oklch(0.33 0.05 85);
-  --accent-foreground: oklch(0.95 0.03 85);
-  --destructive: oklch(0.65 0.2 25);
-  --success: oklch(0.7 0.14 150);
-  --warning: oklch(0.8 0.14 75);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.72 0.12 160);
+  --background: oklch(0.19 0.012 70);
+  --foreground: oklch(0.94 0.012 85);
+  --card: oklch(0.225 0.014 70);
+  --card-foreground: oklch(0.94 0.012 85);
+  --popover: oklch(0.225 0.014 70);
+  --popover-foreground: oklch(0.94 0.012 85);
+  --primary: oklch(0.74 0.11 158);
+  --primary-foreground: oklch(0.2 0.03 158);
+  --secondary: oklch(0.29 0.03 158);
+  --secondary-foreground: oklch(0.9 0.04 150);
+  --muted: oklch(0.27 0.014 70);
+  --muted-foreground: oklch(0.72 0.02 80);
+  --accent: oklch(0.32 0.05 45);
+  --accent-foreground: oklch(0.9 0.06 55);
+  --terracotta: oklch(0.72 0.13 45);
+  --destructive: oklch(0.66 0.19 25);
+  --success: oklch(0.72 0.13 152);
+  --warning: oklch(0.8 0.13 75);
+  --border: oklch(1 0 0 / 11%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.74 0.11 158);
 }
 
 @theme inline {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Fraunces Variable", ui-serif, Georgia, serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -71,6 +79,7 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-terracotta: var(--terracotta);
   --color-destructive: var(--destructive);
   --color-success: var(--success);
   --color-warning: var(--warning);
@@ -85,5 +94,29 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-serif tracking-tight;
+    font-optical-sizing: auto;
+  }
+}
+
+@layer utilities {
+  /* Faint paper grain behind the landing hero. */
+  .bg-paper {
+    background-image:
+      radial-gradient(
+        circle at 15% 20%,
+        color-mix(in oklch, var(--terracotta) 9%, transparent),
+        transparent 45%
+      ),
+      radial-gradient(
+        circle at 85% 10%,
+        color-mix(in oklch, var(--primary) 10%, transparent),
+        transparent 40%
+      );
   }
 }
