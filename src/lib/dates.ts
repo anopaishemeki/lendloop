@@ -11,7 +11,10 @@ export function formatRange(startDate: string, endDate: string): string {
     : `${formatDay(startDate)} – ${formatDay(endDate)}`;
 }
 
-/** Today as YYYY-MM-DD in UTC, matching how the server compares loan dates. */
-export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+/**
+ * The viewer's local calendar day. The server accepts a start one day before
+ * its UTC "today", so this is always a valid earliest pick.
+ */
+export function localTodayIso(): string {
+  return format(new Date(), "yyyy-MM-dd");
 }

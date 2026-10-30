@@ -16,10 +16,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatRange, todayIso } from "@/lib/dates";
+import { formatRange, localTodayIso } from "@/lib/dates";
 import { errorMessage } from "@/lib/errors";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { addDays } from "../../../convex/lib/dates";
 import { LOAN_MAX_DAYS, LOAN_NOTE_MAX } from "../../../convex/lib/validators";
 
 function BookedDates({ toolId }: { toolId: Id<"tools"> }) {
@@ -52,14 +53,25 @@ export function RequestDialog({
   const [endDate, setEndDate] = useState("");
   const [note, setNote] = useState("");
   const [pending, setPending] = useState(false);
-  const today = todayIso();
+  const today = localTodayIso();
+  const latestEnd = startDate
+    ? addDays(startDate, LOAN_MAX_DAYS - 1)
+    : undefined;
+
+  const changeStart = (value: string) => {
+    setStartDate(value);
+    const latest = value ? addDays(value, LOAN_MAX_DAYS - 1) : undefined;
+    if (endDate && (endDate < value || (latest && endDate > latest))) {
+      setEndDate("");
+    }
+  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setPending(true);
     try {
       await request({ endDate, note: note || undefined, startDate, toolId });
-      toast.success("Request sent. You'll hear back once the owner decides.");
+      toast.success("Request sent. Track it under My requests.");
       setOpen(false);
       setStartDate("");
       setEndDate("");
@@ -91,7 +103,7 @@ export function RequestDialog({
               <Input
                 id="loan-start"
                 min={today}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => changeStart(e.target.value)}
                 required
                 type="date"
                 value={startDate}
@@ -101,6 +113,7 @@ export function RequestDialog({
               <Label htmlFor="loan-end">Until</Label>
               <Input
                 id="loan-end"
+                max={latestEnd}
                 min={startDate || today}
                 onChange={(e) => setEndDate(e.target.value)}
                 required
