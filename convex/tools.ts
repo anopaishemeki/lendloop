@@ -17,6 +17,7 @@ import {
 import { todayUtc } from "./lib/dates";
 import { loansForTool, transitionLoan } from "./lib/loans";
 import { cleanText } from "./lib/text";
+import { publicProfile, userLoader } from "./lib/users";
 import {
   categoryValidator,
   conditionValidator,
@@ -51,10 +52,6 @@ const publicToolView = v.object({
   name: v.string(),
 });
 
-function firstName(name: string) {
-  return name.split(" ")[0] || name;
-}
-
 function cleanFields(args: { name: string; description: string }) {
   return {
     description: cleanText(
@@ -70,17 +67,7 @@ function cleanFields(args: { name: string; description: string }) {
 /** Builds card views, loading each owner once per query instead of once per tool. */
 function viewBuilder(ctx: QueryCtx, viewer: Viewer) {
   const today = todayUtc();
-  const owners = new Map<Id<"users">, Promise<Doc<"users"> | null>>([
-    [viewer.user._id, Promise.resolve(viewer.user)],
-  ]);
-  const ownerOf = (id: Id<"users">) => {
-    let owner = owners.get(id);
-    if (!owner) {
-      owner = ctx.db.get(id);
-      owners.set(id, owner);
-    }
-    return owner;
-  };
+  const ownerOf = userLoader(ctx, viewer.user);
 
   return async (tool: Doc<"tools">) => {
     const [owner, availability] = await Promise.all([
@@ -95,10 +82,7 @@ function viewBuilder(ctx: QueryCtx, viewer: Viewer) {
       description: tool.description,
       isMine: isSelf(viewer, tool.ownerId),
       name: tool.name,
-      owner: {
-        firstName: owner ? firstName(owner.name) : "Neighbor",
-        isTrustedLender: owner?.isTrustedLender ?? false,
-      },
+      owner: publicProfile(owner),
     };
   };
 }
