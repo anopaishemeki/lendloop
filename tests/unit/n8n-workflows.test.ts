@@ -150,10 +150,14 @@ describe("request notifications: Build email node", () => {
     };
     const [email] = await runCode(
       codeOf("lendloop-request-notifications.json", "Build email"),
-      { $input: { first: () => ({ json: { payload } }) } }
+      {
+        $input: { first: () => ({ json: { payload } }) },
+        $vars: { RESEND_FROM: "LendLoop <hi@lendloop.example>" },
+      }
     );
     expect(email?.json).toMatchObject({
       eventId: "evt1",
+      from: "LendLoop <hi@lendloop.example>",
       subject: "Ben would like to borrow your Drill",
       to: "olive@example.test",
     });
@@ -180,12 +184,16 @@ describe("request notifications: Classify failure node", () => {
 describe("overdue reminders: signing and verification nodes", () => {
   const FILE = "lendloop-overdue-reminders.json";
   const INBOUND = "inbound-secret";
-  const vars = { LENDLOOP_INBOUND_SECRET: INBOUND };
+  const vars = {
+    LENDLOOP_CONVEX_SITE_URL: "https://demo.convex.site/",
+    LENDLOOP_INBOUND_SECRET: INBOUND,
+  };
 
   test("Sign request produces a GET signature Convex accepts", async () => {
     const [signed] = await runCode(codeOf(FILE, "Sign request"), {
       $vars: vars,
     });
+    expect(signed?.json.url).toBe("https://demo.convex.site/n8n/overdue-loans");
     expect(
       await verifyRequest(INBOUND, {
         body: "",
@@ -257,6 +265,7 @@ describe("overdue reminders: signing and verification nodes", () => {
       $vars: vars,
     })) as unknown as { json: Record<string, unknown> };
     expect(JSON.parse(String(signed.json.body))).toEqual(outcome);
+    expect(signed.json.url).toBe("https://demo.convex.site/n8n/reminders");
     expect(
       await verifyRequest(INBOUND, {
         body: String(signed.json.body),
@@ -305,19 +314,75 @@ describe("overdue reminders: Record outcome node", () => {
 });
 
 describe("settings fallback for self-hosted n8n", () => {
-  test("reads environment variables when n8n Variables are unavailable", async () => {
+  const SITE = "https://demo.convex.site";
+
+  async function signWith(globals: Record<string, unknown>) {
     const [signed] = await runCode(
       codeOf("lendloop-overdue-reminders.json", "Sign request"),
-      { $env: { LENDLOOP_INBOUND_SECRET: "env-secret" }, $vars: {} }
+      globals
     );
-    expect(
-      await verifyRequest("env-secret", {
+    return signed?.json;
+  }
+
+  async function signatureValid(
+    secret: string,
+    json: Record<string, unknown> | undefined
+  ) {
+    return (
+      await verifyRequest(secret, {
         body: "",
         method: "GET",
         path: "/n8n/overdue-loans",
-        signature: String(signed?.json.signature),
-        timestamp: String(signed?.json.timestamp),
+        signature: String(json?.signature),
+        timestamp: String(json?.timestamp),
       })
-    ).toEqual({ ok: true });
+    ).ok;
+  }
+
+  test("reads environment variables when n8n Variables are unavailable", async () => {
+    const json = await signWith({
+      $env: { LENDLOOP_CONVEX_SITE_URL: SITE, LENDLOOP_INBOUND_SECRET: "env" },
+      $vars: {},
+    });
+    expect(await signatureValid("env", json)).toBe(true);
+  });
+
+  test("prefers n8n Variables over environment variables", async () => {
+    const json = await signWith({
+      $env: { LENDLOOP_CONVEX_SITE_URL: SITE, LENDLOOP_INBOUND_SECRET: "env" },
+      $vars: {
+        LENDLOOP_CONVEX_SITE_URL: SITE,
+        LENDLOOP_INBOUND_SECRET: "vars",
+      },
+    });
+    expect(await signatureValid("vars", json)).toBe(true);
+  });
+
+  test("names the missing setting when neither source has it", async () => {
+    await expect(signWith({ $vars: {} })).rejects.toThrow(
+      /LENDLOOP_INBOUND_SECRET is not set/u
+    );
+  });
+
+  test("Verify signature treats blocked env access as not configured", async () => {
+    const [result] = await runCode(
+      codeOf("lendloop-request-notifications.json", "Verify signature"),
+      {
+        $env: new Proxy(
+          {},
+          {
+            get: () => {
+              throw new Error("access to env vars denied");
+            },
+          }
+        ),
+        $input: {
+          first: () => ({ json: { headers: {}, webhookUrl: WEBHOOK_URL } }),
+        },
+        $vars: {},
+      },
+      { helpers: { getBinaryDataBuffer: async () => Buffer.from("{}") } }
+    );
+    expect(result?.json.reason).toBe("not configured");
   });
 });
