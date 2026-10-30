@@ -8,10 +8,10 @@ export function AuthShell({ children }: { children: ReactNode }) {
     <div className="grid min-h-svh lg:grid-cols-2">
       <aside className="bg-primary text-primary-foreground relative hidden flex-col justify-between overflow-hidden p-12 lg:flex">
         <div className="bg-terracotta/30 absolute -top-24 -right-24 size-80 rounded-full blur-3xl" />
-        <Logo className="[&_span:first-child]:bg-primary-foreground [&_span:first-child]:text-primary relative" />
+        <Logo className="relative" inverted />
         <figure className="relative max-w-md space-y-5">
           <Quote aria-hidden className="size-8 opacity-60" />
-          <blockquote className="font-serif text-3xl leading-snug">
+          <blockquote className="font-display text-3xl leading-snug">
             Most tools spend their lives on a shelf. On our street, they get
             passed around.
           </blockquote>
