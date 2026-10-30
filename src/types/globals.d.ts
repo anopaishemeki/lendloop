@@ -2,8 +2,7 @@ export {};
 
 declare global {
   interface CustomJwtSessionClaims {
-    metadata?: {
-      role?: "admin";
-    };
+    // Untrusted shape; read it through roleFromMetadata in convex/lib/roles.ts.
+    metadata?: unknown;
   }
 }

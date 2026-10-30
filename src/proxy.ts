@@ -7,7 +7,7 @@ export default clerkMiddleware(async (auth, req) => {
   if (isPublicRoute(pathname)) return;
 
   const { sessionClaims } = await auth.protect();
-  if (!canAccessRoute(pathname, sessionClaims.metadata?.role)) {
+  if (!canAccessRoute(pathname, sessionClaims.metadata)) {
     return NextResponse.redirect(new URL("/tools", req.url));
   }
 });

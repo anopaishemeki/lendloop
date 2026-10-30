@@ -27,9 +27,10 @@ describe("admin routes", () => {
   });
 
   test("only the admin role may open them", () => {
-    expect(canAccessRoute("/admin", "admin")).toBe(true);
+    expect(canAccessRoute("/admin", { role: "admin" })).toBe(true);
     expect(canAccessRoute("/admin", undefined)).toBe(false);
-    expect(canAccessRoute("/admin", "Admin")).toBe(false);
+    expect(canAccessRoute("/admin", { role: "Admin" })).toBe(false);
+    expect(canAccessRoute("/admin", "admin")).toBe(false);
     expect(canAccessRoute("/tools", undefined)).toBe(true);
   });
 });

@@ -1,3 +1,5 @@
+import { roleFromMetadata } from "../../convex/lib/roles";
+
 // Pure route rules for src/proxy.ts. The proxy only improves UX (redirects);
 // every Convex function re-checks identity and role on its own.
 
@@ -19,6 +21,6 @@ export function isAdminRoute(pathname: string) {
   return matchesPrefix(pathname, ADMIN_PREFIX);
 }
 
-export function canAccessRoute(pathname: string, role: string | undefined) {
-  return !isAdminRoute(pathname) || role === "admin";
+export function canAccessRoute(pathname: string, metadata: unknown) {
+  return !isAdminRoute(pathname) || roleFromMetadata(metadata) === "admin";
 }

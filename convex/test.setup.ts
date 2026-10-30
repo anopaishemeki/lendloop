@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import type { UserIdentity } from "convex/server";
-import type { Role } from "./auth";
+import type { Role } from "./lib/roles";
 
 // Must stay `./**/*.*s`: convex-test locates the `_generated` folder from the keys.
 export const modules = import.meta.glob("./**/*.*s");
