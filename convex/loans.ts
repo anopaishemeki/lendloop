@@ -14,6 +14,7 @@ import {
   requireViewer,
   type Viewer,
 } from "./auth";
+import { activityValidator, loanActivity } from "./lib/activity";
 import { isOnLoan } from "./lib/availability";
 import {
   addDays,
@@ -47,6 +48,7 @@ const CLOSED_STATUSES = ["returned", "declined", "cancelled"] as const;
 const loanView = v.object({
   _creationTime: v.number(),
   _id: v.id("loans"),
+  activity: v.array(activityValidator),
   canApprove: v.boolean(),
   canCancel: v.boolean(),
   canDecline: v.boolean(),
@@ -96,13 +98,15 @@ function viewBuilder(ctx: QueryCtx, viewer: Viewer) {
   const get = cachedGet(ctx, viewer.user);
   return async (loan: Doc<"loans">): Promise<LoanView> => {
     const role = isSelf(viewer, loan.ownerId) ? "owner" : "borrower";
-    const [tool, counterpart] = await Promise.all([
+    const [tool, counterpart, activity] = await Promise.all([
       get(loan.toolId),
       get(role === "owner" ? loan.borrowerId : loan.ownerId),
+      loanActivity(ctx, loan._id, loan, viewer.user._id),
     ]);
     return {
       _creationTime: loan._creationTime,
       _id: loan._id,
+      activity,
       ...allowedActions(viewer, loan, today),
       counterpart: publicProfile(counterpart),
       endDate: loan.endDate,
