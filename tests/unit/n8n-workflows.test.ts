@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
-import { signRequest } from "../../convex/lib/hmac";
+import { signRequest, verifyRequest } from "../../convex/lib/hmac";
 
 type N8nNode = {
   name: string;
@@ -174,5 +174,86 @@ describe("request notifications: Classify failure node", () => {
       { $input: { first: () => ({ json: { error } }) } }
     );
     expect(result?.json.retryable).toBe(retryable);
+  });
+});
+
+describe("overdue reminders: signing and verification nodes", () => {
+  const FILE = "lendloop-overdue-reminders.json";
+  const INBOUND = "inbound-secret";
+  const vars = { LENDLOOP_INBOUND_SECRET: INBOUND };
+
+  test("Sign request produces a GET signature Convex accepts", async () => {
+    const [signed] = await runCode(codeOf(FILE, "Sign request"), {
+      $vars: vars,
+    });
+    expect(
+      await verifyRequest(INBOUND, {
+        body: "",
+        method: "GET",
+        path: "/n8n/overdue-loans",
+        signature: String(signed?.json.signature),
+        timestamp: String(signed?.json.timestamp),
+      })
+    ).toEqual({ ok: true });
+  });
+
+  test("Verify response splits a signed Convex response into loans", async () => {
+    const body = JSON.stringify({
+      loans: [{ loanId: "a" }, { loanId: "b" }],
+      reminderDate: "2026-10-30",
+    });
+    const { signature, timestamp } = await signRequest(INBOUND, {
+      body,
+      method: "RESPONSE",
+      path: "/n8n/overdue-loans",
+    });
+    const response = (sent: Record<string, string>, text = body) => ({
+      $input: { first: () => ({ json: { body: text, headers: sent } }) },
+      $vars: vars,
+    });
+    const headers = {
+      "x-lendloop-signature": signature,
+      "x-lendloop-timestamp": timestamp,
+    };
+
+    const items = await runCode(
+      codeOf(FILE, "Verify response"),
+      response(headers)
+    );
+    expect(items.map((item) => item.json.loanId)).toEqual(["a", "b"]);
+
+    await expect(
+      runCode(
+        codeOf(FILE, "Verify response"),
+        response(headers, body.replace('"a"', '"z"'))
+      )
+    ).rejects.toThrow(/does not match/u);
+    await expect(
+      runCode(codeOf(FILE, "Verify response"), response({}))
+    ).rejects.toThrow(/not signed/u);
+  });
+
+  test("Sign write-back produces a POST signature Convex accepts", async () => {
+    const outcome = {
+      idempotencyKey: "loan1:2026-10-30",
+      loanId: "loan1",
+      reminderDate: "2026-10-30",
+      status: "sent",
+    };
+    // "Run once for each item" nodes return a single item, not an array.
+    const signed = (await runCode(codeOf(FILE, "Sign write-back"), {
+      $json: outcome,
+      $vars: vars,
+    })) as unknown as { json: Record<string, unknown> };
+    expect(JSON.parse(String(signed.json.body))).toEqual(outcome);
+    expect(
+      await verifyRequest(INBOUND, {
+        body: String(signed.json.body),
+        method: "POST",
+        path: "/n8n/reminders",
+        signature: String(signed.json.signature),
+        timestamp: String(signed.json.timestamp),
+      })
+    ).toEqual({ ok: true });
   });
 });
