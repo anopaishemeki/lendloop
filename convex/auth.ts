@@ -7,6 +7,7 @@ export type Role = "admin" | "user";
 
 export type ErrorCode =
   | "UNAUTHENTICATED"
+  | "PROFILE_PENDING"
   | "FORBIDDEN"
   | "NOT_FOUND"
   | "INVALID_ARGUMENT"
@@ -23,10 +24,12 @@ export function fail(code: ErrorCode, message: string): never {
   throw new ConvexError({ code, message });
 }
 
-// The role claim comes from Clerk publicMetadata via the session token. Anything
+// Clerk's session token is customized with `"metadata": "{{user.public_metadata}}"`,
+// the same claim src/proxy.ts reads, so both layers agree on one source. Anything
 // other than the exact string "admin" is a regular user.
 export function roleFromIdentity(identity: UserIdentity): Role {
-  return identity.role === "admin" ? "admin" : "user";
+  const metadata = identity.metadata as { role?: unknown } | undefined;
+  return metadata?.role === "admin" ? "admin" : "user";
 }
 
 async function requireIdentity(ctx: QueryCtx): Promise<UserIdentity> {
@@ -42,14 +45,16 @@ function findUser(ctx: QueryCtx, clerkId: string) {
     .unique();
 }
 
+// Only claims actually present are returned, so a token that omits one never
+// overwrites a stored value with a blank.
 export function profileFromIdentity(identity: UserIdentity) {
-  const email = identity.email ?? "";
+  const profile: { email?: string; name?: string } = {};
+  if (identity.email) profile.email = identity.email;
   const name =
     identity.name?.trim() ||
-    [identity.givenName, identity.familyName].filter(Boolean).join(" ") ||
-    email.split("@")[0] ||
-    "Neighbor";
-  return { email, name };
+    [identity.givenName, identity.familyName].filter(Boolean).join(" ");
+  if (name) profile.name = name;
+  return profile;
 }
 
 /**
@@ -66,30 +71,34 @@ export async function getViewer(ctx: QueryCtx) {
 export async function requireViewer(ctx: QueryCtx): Promise<Viewer> {
   const identity = await requireIdentity(ctx);
   const user = await findUser(ctx, identity.subject);
-  if (!user) fail("UNAUTHENTICATED", "Your profile is still being set up.");
+  if (!user) fail("PROFILE_PENDING", "Your profile is still being set up.");
   return { identity, role: roleFromIdentity(identity), user };
 }
 
 /** Mutation-side guard: creates or refreshes the caller's profile row. */
 export async function requireViewerForWrite(ctx: MutationCtx): Promise<Viewer> {
   const identity = await requireIdentity(ctx);
+  const role = roleFromIdentity(identity);
   const profile = profileFromIdentity(identity);
   const existing = await findUser(ctx, identity.subject);
   if (existing) {
-    if (existing.email !== profile.email || existing.name !== profile.name) {
-      await ctx.db.patch(existing._id, profile);
-    }
-    const user = (await ctx.db.get(existing._id))!;
-    return { identity, role: roleFromIdentity(identity), user };
+    const changed = (Object.keys(profile) as (keyof typeof profile)[]).some(
+      (key) => profile[key] !== existing[key]
+    );
+    if (!changed) return { identity, role, user: existing };
+    await ctx.db.patch(existing._id, profile);
+    return { identity, role, user: { ...existing, ...profile } };
   }
-  const id = await ctx.db.insert("users", {
-    ...profile,
+  const fields = {
     clerkId: identity.subject,
     createdAt: Date.now(),
+    email: profile.email ?? "",
     isTrustedLender: false,
-  });
-  const user = (await ctx.db.get(id))!;
-  return { identity, role: roleFromIdentity(identity), user };
+    name: profile.name ?? profile.email?.split("@")[0] ?? "Neighbor",
+  };
+  const _id = await ctx.db.insert("users", fields);
+  const user = (await ctx.db.get(_id))!;
+  return { identity, role, user };
 }
 
 export function assertAdmin(viewer: Viewer) {

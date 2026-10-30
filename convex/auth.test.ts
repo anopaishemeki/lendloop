@@ -52,13 +52,28 @@ describe("users.me", () => {
     }
   });
 
-  test("ignores a forged role with different casing", async () => {
+  test("ignores wrong-cased or top-level role claims", async () => {
     const t = convexTest(schema, modules);
     const caller = t.withIdentity({
       ...identityFor("eve"),
-      role: "Admin",
+      metadata: { role: "Admin" },
+      role: "admin",
     });
     await caller.mutation(api.users.syncCurrentUser, {});
     expect((await caller.query(api.users.me, {}))?.isAdmin).toBe(false);
+  });
+});
+
+describe("profile refresh", () => {
+  test("a token without email keeps the stored address", async () => {
+    const t = convexTest(schema, modules);
+    await t
+      .withIdentity(identityFor("frank"))
+      .mutation(api.users.syncCurrentUser, {});
+    await t
+      .withIdentity({ ...identityFor("frank"), email: undefined })
+      .mutation(api.users.syncCurrentUser, {});
+    const row = await t.run((ctx) => ctx.db.query("users").first());
+    expect(row?.email).toBe("frank@example.test");
   });
 });
