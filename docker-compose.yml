@@ -1,29 +1,31 @@
-# Optional: run n8n locally instead of n8n Cloud. The workflows in n8n/workflows
-# are instance-agnostic; only the webhook base URL and credentials change.
+# Optional: run n8n locally instead of n8n Cloud, for development only.
+# See n8n/README.md for what changes between instances.
 #
 #   cp n8n/.env.example n8n/.env   # fill in the values
 #   docker compose up -d           # editor at http://localhost:5678
 #
 # Convex runs in the cloud, so it must reach this instance over the internet to
-# deliver request events (e.g. expose port 5678 with a tunnel and set WEBHOOK_URL
-# to the tunnel URL). The reminders workflow only makes outbound calls.
+# deliver request events: tunnel only the /webhook/ path to port 5678 and set
+# WEBHOOK_URL to the tunnel URL. The reminders workflow only makes outbound calls.
 
 services:
   n8n:
     image: docker.n8n.io/n8nio/n8n:2.43.8
     restart: unless-stopped
+    # Loopback only: the editor must not be reachable from the network.
     ports:
-      - "5678:5678"
+      - "127.0.0.1:5678:5678"
     env_file: n8n/.env
     environment:
       GENERIC_TIMEZONE: UTC
       TZ: UTC
       # The HMAC Code nodes use node:crypto.
       NODE_FUNCTION_ALLOW_BUILTIN: crypto
-      # Community edition has no n8n Variables; the workflows fall back to these
-      # environment variables, so Code nodes and expressions must be able to read them.
+      # Community edition has no n8n Variables, so the workflows read the
+      # LENDLOOP_* settings from the environment. This lets every Code node read
+      # the container environment, which is why n8n's own encryption key is not
+      # set here (n8n generates it into the data volume instead).
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
-      N8N_RUNNERS_ENABLED: "true"
       N8N_DIAGNOSTICS_ENABLED: "false"
     volumes:
       - n8n_data:/home/node/.n8n
