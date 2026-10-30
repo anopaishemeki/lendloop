@@ -16,6 +16,9 @@ import { CATEGORY_LABELS, CONDITION_LABELS } from "@/lib/tool-labels";
 import {
   TOOL_CATEGORIES,
   TOOL_CONDITIONS,
+  TOOL_DESCRIPTION_MAX,
+  TOOL_NAME_MAX,
+  TOOL_NAME_MIN,
   type ToolCategory,
   type ToolCondition,
 } from "../../../convex/lib/validators";
@@ -69,8 +72,8 @@ export function ToolForm({
         <Label htmlFor="tool-name">Name</Label>
         <Input
           id="tool-name"
-          maxLength={80}
-          minLength={2}
+          maxLength={TOOL_NAME_MAX}
+          minLength={TOOL_NAME_MIN}
           onChange={(e) => set("name", e.target.value)}
           placeholder="Cordless drill"
           required
@@ -119,7 +122,7 @@ export function ToolForm({
         <Label htmlFor="tool-description">Short description</Label>
         <Textarea
           id="tool-description"
-          maxLength={500}
+          maxLength={TOOL_DESCRIPTION_MAX}
           onChange={(e) => set("description", e.target.value)}
           placeholder="What's included, any quirks, pickup notes"
           rows={4}

@@ -8,6 +8,8 @@ import { ToolForm, type ToolFormValues } from "@/components/tools/tool-form";
 import { errorMessage } from "@/lib/errors";
 import { api } from "../../../../../convex/_generated/api";
 
+const BACK = "/my/listings";
+
 export default function NewToolPage() {
   const router = useRouter();
   const create = useMutation(api.tools.create);
@@ -16,7 +18,7 @@ export default function NewToolPage() {
     try {
       await create(values);
       toast.success(`${values.name.trim()} is now listed`);
-      router.push("/my/listings");
+      router.push(BACK);
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -29,7 +31,7 @@ export default function NewToolPage() {
         title="List a tool"
       />
       <ToolForm
-        onCancel={() => router.push("/my/listings")}
+        onCancel={() => router.push(BACK)}
         onSubmit={handleSubmit}
         submitLabel="List tool"
       />
