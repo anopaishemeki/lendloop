@@ -100,6 +100,32 @@ describe("request notifications: Verify signature node", () => {
     expect((await verify(body, {}))?.reason).toBe("missing signature");
   });
 
+  test("refuses to guess when the raw body is unavailable", async () => {
+    const [result] = await runCode(
+      codeOf("lendloop-request-notifications.json", "Verify signature"),
+      {
+        $input: {
+          first: () => ({
+            json: {
+              body: JSON.parse(body),
+              headers: {},
+              webhookUrl: WEBHOOK_URL,
+            },
+          }),
+        },
+        $vars: { LENDLOOP_OUTBOUND_SECRET: SECRET },
+      },
+      {
+        helpers: {
+          getBinaryDataBuffer: () => {
+            throw new Error("no binary");
+          },
+        },
+      }
+    );
+    expect(String(result?.json.reason)).toContain("no raw body");
+  });
+
   test("fails closed when the n8n variable is not set", async () => {
     expect((await verify(body, await signedHeaders(body), ""))?.reason).toBe(
       "not configured"
@@ -117,7 +143,6 @@ describe("request notifications: Build email node", () => {
       loan: {
         endDate: "2026-11-03",
         startDate: "2026-11-01",
-        status: "requested",
       },
       occurredAt: "2026-10-30T10:00:00.000Z",
       recipient: { email: "olive@example.test", firstName: "Olive" },
@@ -133,5 +158,21 @@ describe("request notifications: Build email node", () => {
       to: "olive@example.test",
     });
     expect(email?.json.text).toContain(payload.appUrl);
+  });
+});
+
+describe("request notifications: Classify failure node", () => {
+  test.each([
+    [{ httpCode: "422", message: "Invalid `to` field" }, false],
+    [{ message: "403 - forbidden" }, false],
+    [{ httpCode: "503", message: "Service unavailable" }, true],
+    [{ httpCode: "429", message: "Too many requests" }, true],
+    [{ message: "socket hang up" }, true],
+  ])("%o -> retryable %s", async (error, retryable) => {
+    const [result] = await runCode(
+      codeOf("lendloop-request-notifications.json", "Classify failure"),
+      { $input: { first: () => ({ json: { error } }) } }
+    );
+    expect(result?.json.retryable).toBe(retryable);
   });
 });
