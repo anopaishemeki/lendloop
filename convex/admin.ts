@@ -1,3 +1,7 @@
+import {
+  paginationOptsValidator,
+  paginationResultValidator,
+} from "convex/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
@@ -6,13 +10,7 @@ import { availabilityOf, availabilityValidator } from "./lib/availability";
 import { todayUtc } from "./lib/dates";
 import { cachedGet } from "./lib/db";
 import { isOverdue } from "./lib/loans";
-import {
-  categoryValidator,
-  LOAN_STATUSES,
-  loanStatusValidator,
-} from "./lib/validators";
-
-const ADMIN_LIST_LIMIT = 200;
+import { categoryValidator, loanStatusValidator } from "./lib/validators";
 
 const adminLoanView = v.object({
   _creationTime: v.number(),
@@ -40,34 +38,30 @@ const adminUserView = v.object({
   name: v.string(),
 });
 
+// Admins see full names (not just first names) so they can tell people apart.
 function nameOf(user: Doc<"users"> | null) {
   return user?.name ?? "Unknown";
 }
 
-/** Every loan across the neighborhood, newest first, optionally by status. */
+/** Every loan, newest first, optionally narrowed to one status. */
 export const listLoans = query({
-  args: { status: v.optional(loanStatusValidator) },
-  handler: async (ctx, { status }) => {
+  args: {
+    paginationOpts: paginationOptsValidator,
+    status: v.optional(loanStatusValidator),
+  },
+  handler: async (ctx, { paginationOpts, status }) => {
     await requireAdmin(ctx);
-    const statuses = status ? [status] : LOAN_STATUSES;
-    const perStatus = await Promise.all(
-      statuses.map((s) =>
-        ctx.db
+    const loans = status
+      ? ctx.db
           .query("loans")
-          .withIndex("by_status_and_end_date", (q) => q.eq("status", s))
-          .order("desc")
-          .take(ADMIN_LIST_LIMIT)
-      )
-    );
-    const loans = perStatus
-      .flat()
-      .sort((a, b) => b._creationTime - a._creationTime)
-      .slice(0, ADMIN_LIST_LIMIT);
+          .withIndex("by_status", (q) => q.eq("status", status))
+      : ctx.db.query("loans");
+    const result = await loans.order("desc").paginate(paginationOpts);
 
     const today = todayUtc();
     const get = cachedGet(ctx);
-    return await Promise.all(
-      loans.map(async (loan) => {
+    const page = await Promise.all(
+      result.page.map(async (loan) => {
         const [tool, owner, borrower] = await Promise.all([
           get(loan.toolId),
           get(loan.ownerId),
@@ -86,45 +80,62 @@ export const listLoans = query({
         };
       })
     );
+    return { ...result, page };
   },
-  returns: v.array(adminLoanView),
+  returns: paginationResultValidator(adminLoanView),
 });
 
-/** All live listings so an admin can remove any of them via tools.remove. */
+/** All live listings, newest first, so an admin can remove any via tools.remove. */
 export const listTools = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
     await requireAdmin(ctx);
-    const tools = await ctx.db
+    const result = await ctx.db
       .query("tools")
       .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined))
       .order("desc")
-      .take(ADMIN_LIST_LIMIT);
+      .paginate(paginationOpts);
     const today = todayUtc();
     const get = cachedGet(ctx);
-    return await Promise.all(
-      tools.map(async (tool) => ({
-        _id: tool._id,
-        availability: await availabilityOf(ctx, tool._id, today),
-        category: tool.category,
-        name: tool.name,
-        ownerName: nameOf(await get(tool.ownerId)),
-      }))
+    const page = await Promise.all(
+      result.page.map(async (tool) => {
+        const [owner, availability] = await Promise.all([
+          get(tool.ownerId),
+          availabilityOf(ctx, tool._id, today),
+        ]);
+        return {
+          _id: tool._id,
+          availability,
+          category: tool.category,
+          name: tool.name,
+          ownerName: nameOf(owner),
+        };
+      })
     );
+    return { ...result, page };
   },
-  returns: v.array(adminToolView),
+  returns: paginationResultValidator(adminToolView),
 });
 
+/** Every neighbor, alphabetically. */
 export const listUsers = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
     await requireAdmin(ctx);
-    const users = await ctx.db.query("users").take(ADMIN_LIST_LIMIT);
-    return users
-      .map(({ _id, isTrustedLender, name }) => ({ _id, isTrustedLender, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const result = await ctx.db
+      .query("users")
+      .withIndex("by_name")
+      .paginate(paginationOpts);
+    return {
+      ...result,
+      page: result.page.map(({ _id, isTrustedLender, name }) => ({
+        _id,
+        isTrustedLender,
+        name,
+      })),
+    };
   },
-  returns: v.array(adminUserView),
+  returns: paginationResultValidator(adminUserView),
 });
 
 export const setTrustedLender = mutation({

@@ -5,6 +5,8 @@ import { addDays, todayUtc } from "./lib/dates";
 import schema from "./schema";
 import { identityFor, modules } from "./test.setup";
 
+const PAGE = { cursor: null, numItems: 25 };
+
 async function setup() {
   const t = convexTest(schema, modules);
   const as = async (subject: string, role?: "admin") => {
@@ -29,17 +31,17 @@ describe("admin queries and mutations reject non-admins", () => {
     [
       "listLoans",
       (c: Awaited<ReturnType<typeof setup>>["owner"]["caller"]) =>
-        c.query(api.admin.listLoans, {}),
+        c.query(api.admin.listLoans, { paginationOpts: PAGE }),
     ],
     [
       "listTools",
       (c: Awaited<ReturnType<typeof setup>>["owner"]["caller"]) =>
-        c.query(api.admin.listTools, {}),
+        c.query(api.admin.listTools, { paginationOpts: PAGE }),
     ],
     [
       "listUsers",
       (c: Awaited<ReturnType<typeof setup>>["owner"]["caller"]) =>
-        c.query(api.admin.listUsers, {}),
+        c.query(api.admin.listUsers, { paginationOpts: PAGE }),
     ],
   ])("%s", async (_name, call) => {
     const { owner } = await setup();
@@ -58,7 +60,9 @@ describe("admin queries and mutations reject non-admins", () => {
 
   test("signed-out callers", async () => {
     const { t } = await setup();
-    await expect(t.query(api.admin.listLoans, {})).rejects.toThrow(/Sign in/u);
+    await expect(
+      t.query(api.admin.listLoans, { paginationOpts: PAGE })
+    ).rejects.toThrow(/Sign in/u);
   });
 });
 
@@ -75,7 +79,9 @@ describe("admin views", () => {
         toolId,
       })
     );
-    const loans = await admin.caller.query(api.admin.listLoans, {});
+    const { page: loans } = await admin.caller.query(api.admin.listLoans, {
+      paginationOpts: PAGE,
+    });
     expect(loans).toHaveLength(1);
     expect(loans[0]).toMatchObject({
       borrowerName: "ben",
@@ -84,17 +90,28 @@ describe("admin views", () => {
       toolName: "Tent",
     });
     expect(
-      await admin.caller.query(api.admin.listLoans, { status: "returned" })
+      (
+        await admin.caller.query(api.admin.listLoans, {
+          paginationOpts: PAGE,
+          status: "returned",
+        })
+      ).page
     ).toEqual([]);
   });
 
   test("lists live tools and can remove any of them", async () => {
     const { admin, toolId } = await setup();
-    expect(await admin.caller.query(api.admin.listTools, {})).toMatchObject([
+    expect(
+      (await admin.caller.query(api.admin.listTools, { paginationOpts: PAGE }))
+        .page
+    ).toMatchObject([
       { availability: "available", name: "Tent", ownerName: "olive" },
     ]);
     await admin.caller.mutation(api.tools.remove, { toolId });
-    expect(await admin.caller.query(api.admin.listTools, {})).toEqual([]);
+    expect(
+      (await admin.caller.query(api.admin.listTools, { paginationOpts: PAGE }))
+        .page
+    ).toEqual([]);
   });
 });
 
@@ -107,9 +124,61 @@ describe("trusted lender", () => {
     });
     const [tool] = await borrower.caller.query(api.tools.list, {});
     expect(tool?.owner.isTrustedLender).toBe(true);
-    const users = await admin.caller.query(api.admin.listUsers, {});
+    const { page: users } = await admin.caller.query(api.admin.listUsers, {
+      paginationOpts: PAGE,
+    });
     expect(users.find((u) => u._id === owner.userId)?.isTrustedLender).toBe(
       true
     );
+  });
+});
+
+describe("admin pagination", () => {
+  test("lists every user alphabetically across pages", async () => {
+    const { admin, t } = await setup();
+    for (const name of ["zed", "amy", "kim"]) {
+      await t
+        .withIdentity(identityFor(name))
+        .mutation(api.users.syncCurrentUser, {});
+    }
+    const first = await admin.caller.query(api.admin.listUsers, {
+      paginationOpts: { cursor: null, numItems: 3 },
+    });
+    const second = await admin.caller.query(api.admin.listUsers, {
+      paginationOpts: { cursor: first.continueCursor, numItems: 3 },
+    });
+    expect([...first.page, ...second.page].map((u) => u.name)).toEqual([
+      "amy",
+      "ben",
+      "kim",
+      "olive",
+      "root",
+      "zed",
+    ]);
+  });
+
+  test("lists loans newest first regardless of dates", async () => {
+    const { admin, borrower, owner, t, toolId } = await setup();
+    const insert = (startDate: string, endDate: string) =>
+      t.run((ctx) =>
+        ctx.db.insert("loans", {
+          borrowerId: borrower.userId,
+          endDate,
+          ownerId: owner.userId,
+          startDate,
+          status: "requested",
+          toolId,
+        })
+      );
+    const older = await insert(
+      addDays(todayUtc(), 20),
+      addDays(todayUtc(), 21)
+    );
+    const newer = await insert(addDays(todayUtc(), 1), addDays(todayUtc(), 2));
+    const { page } = await admin.caller.query(api.admin.listLoans, {
+      paginationOpts: PAGE,
+      status: "requested",
+    });
+    expect(page.map((loan) => loan._id)).toEqual([newer, older]);
   });
 });

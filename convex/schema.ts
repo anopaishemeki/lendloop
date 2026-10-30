@@ -24,6 +24,7 @@ export default defineSchema({
   })
     .index("by_borrower_and_status", ["borrowerId", "status"])
     .index("by_owner_and_status", ["ownerId", "status"])
+    .index("by_status", ["status"])
     .index("by_status_and_end_date", ["status", "endDate"])
     .index("by_tool_and_status_and_start_date", [
       "toolId",
@@ -73,5 +74,7 @@ export default defineSchema({
     email: v.string(),
     isTrustedLender: v.boolean(),
     name: v.string(),
-  }).index("by_clerk_id", ["clerkId"]),
+  })
+    .index("by_clerk_id", ["clerkId"])
+    .index("by_name", ["name"]),
 });
