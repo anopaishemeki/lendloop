@@ -1,5 +1,5 @@
-import { BadgeCheck } from "lucide-react";
 import type { ReactNode } from "react";
+import { TrustedLenderBadge } from "@/components/trusted-lender-badge";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -40,12 +40,7 @@ export function ToolCard({
         ) : null}
         <p className="text-muted-foreground flex items-center gap-1 text-xs">
           {tool.isMine ? "Your listing" : `Lent by ${tool.owner.firstName}`}
-          {tool.owner.isTrustedLender ? (
-            <span className="text-primary inline-flex items-center gap-0.5 font-medium">
-              <BadgeCheck aria-hidden className="size-3.5" />
-              Trusted lender
-            </span>
-          ) : null}
+          {tool.owner.isTrustedLender ? <TrustedLenderBadge /> : null}
         </p>
       </CardContent>
       {actions ? <CardFooter className="gap-2">{actions}</CardFooter> : null}

@@ -1,4 +1,4 @@
-import { BadgeCheck } from "lucide-react";
+import { TrustedLenderBadge } from "@/components/trusted-lender-badge";
 import { formatRange } from "@/lib/dates";
 import { LoanActions } from "./loan-actions";
 import { LoanStatusBadge } from "./loan-status-badge";
@@ -28,10 +28,7 @@ export function LoanCard({ loan }: { loan: LoanView }) {
         <p className="text-muted-foreground flex items-center gap-1 text-xs">
           {who}
           {loan.role === "borrower" && loan.counterpart.isTrustedLender ? (
-            <span className="text-primary inline-flex items-center gap-0.5 font-medium">
-              <BadgeCheck aria-hidden className="size-3.5" />
-              Trusted lender
-            </span>
+            <TrustedLenderBadge />
           ) : null}
         </p>
         {loan.note ? (
