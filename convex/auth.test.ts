@@ -76,4 +76,13 @@ describe("profile refresh", () => {
     const row = await t.run((ctx) => ctx.db.query("users").first());
     expect(row?.email).toBe("frank@example.test");
   });
+
+  test("never uses the email as a display name", async () => {
+    const t = convexTest(schema, modules);
+    await t
+      .withIdentity({ ...identityFor("gina"), name: undefined })
+      .mutation(api.users.syncCurrentUser, {});
+    const row = await t.run((ctx) => ctx.db.query("users").first());
+    expect(row?.name).toBe("Neighbor");
+  });
 });

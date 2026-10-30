@@ -70,7 +70,8 @@ export async function upsertProfile(ctx: MutationCtx): Promise<Id<"users">> {
       clerkId: identity.subject,
       email: profile.email ?? "",
       isTrustedLender: false,
-      name: profile.name ?? profile.email?.split("@")[0] ?? "Neighbor",
+      // Never derive a display name from the email: other users see it.
+      name: profile.name ?? "Neighbor",
     });
   }
   const changed = (Object.keys(profile) as (keyof typeof profile)[]).some(
