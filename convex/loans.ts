@@ -14,6 +14,7 @@ import {
   requireViewer,
   type Viewer,
 } from "./auth";
+import { activityValidator, loanActivity } from "./lib/activity";
 import { isOnLoan } from "./lib/availability";
 import {
   addDays,
@@ -372,6 +373,24 @@ export const listIncoming = query({
   args: {},
   handler: async (ctx) => boardFor(ctx, await requireViewer(ctx), "owner"),
   returns: loanBoard,
+});
+
+/**
+ * Recent automation for one loan. A separate query so a delivery update
+ * re-runs only this, not the whole board. Parties to the loan and admins only.
+ */
+export const activity = query({
+  args: { loanId: v.id("loans") },
+  handler: async (ctx, { loanId }) => {
+    const viewer = await requireViewer(ctx);
+    const loan = await ctx.db.get(loanId);
+    if (!loan) fail("NOT_FOUND", "That loan no longer exists.");
+    if (viewer.role !== "admin") {
+      assertLoanParty(viewer, loan, "owner", "borrower");
+    }
+    return await loanActivity(ctx, loan, viewer.user._id);
+  },
+  returns: v.array(activityValidator),
 });
 
 /** Dates already promised to someone, so borrowers can pick free ones. No borrower data. */

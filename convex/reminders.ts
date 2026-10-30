@@ -119,12 +119,17 @@ export const recordReminder = internalMutation({
         loanId,
         reminderDate,
         status,
+        updatedAt: Date.now(),
         ...(lastError ? { error: lastError } : {}),
       });
       return { result: "created" as const };
     }
     if (existing.status === "sent") return { result: "duplicate" as const };
-    await ctx.db.patch(existing._id, { error: lastError, status });
+    await ctx.db.patch(existing._id, {
+      error: lastError,
+      status,
+      updatedAt: Date.now(),
+    });
     return { result: "updated" as const };
   },
   returns: v.object({

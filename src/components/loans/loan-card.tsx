@@ -1,6 +1,7 @@
 import { TrustedLenderBadge } from "@/components/trusted-lender-badge";
 import { formatRange } from "@/lib/dates";
 import { LoanActions } from "./loan-actions";
+import { LoanActivity } from "./loan-activity";
 import { LoanStatusBadge } from "./loan-status-badge";
 import type { LoanView } from "./types";
 
@@ -34,6 +35,10 @@ export function LoanCard({ loan }: { loan: LoanView }) {
         {loan.note ? (
           <p className="text-sm italic">&ldquo;{loan.note}&rdquo;</p>
         ) : null}
+        <LoanActivity
+          loanId={loan._id}
+          otherName={loan.counterpart.firstName}
+        />
       </div>
       <div className="flex shrink-0 flex-wrap gap-2">
         <LoanActions loan={loan} />

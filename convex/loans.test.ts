@@ -358,3 +358,48 @@ describe("views", () => {
     ).toEqual([{ endDate: day(5), startDate: day(3) }]);
   });
 });
+
+describe("activity", () => {
+  test("shows automation outcomes to the loan's parties only", async () => {
+    const s = await setup();
+    const loanId = await seedLoan(s, {
+      endDate: day(-1),
+      startDate: day(-3),
+      status: "approved",
+    });
+    await s.t.run(async (ctx) => {
+      await ctx.db.insert("notificationOutbox", {
+        attempts: 1,
+        event: "request.approved",
+        loanId,
+        recipientId: s.borrower.userId,
+        sentAt: Date.now(),
+        status: "sent",
+      });
+      await ctx.db.insert("reminders", {
+        error: "Resend 503",
+        idempotencyKey: `${loanId}:${today}`,
+        loanId,
+        reminderDate: today,
+        status: "failed",
+        updatedAt: Date.now(),
+      });
+    });
+
+    const mine = await s.borrower.caller.query(api.loans.activity, { loanId });
+    expect(mine).toMatchObject([
+      { kind: "overdue.reminder", status: "failed", toViewer: true },
+      { kind: "request.approved", status: "sent", toViewer: true },
+    ]);
+    const owners = await s.owner.caller.query(api.loans.activity, { loanId });
+    expect(owners.every((item) => !item.toViewer)).toBe(true);
+    expect(JSON.stringify(owners)).not.toContain("Resend 503");
+
+    await expect(
+      s.other.caller.query(api.loans.activity, { loanId })
+    ).rejects.toThrow(/not part of this loan/u);
+    await expect(
+      s.admin.caller.query(api.loans.activity, { loanId })
+    ).resolves.toHaveLength(2);
+  });
+});

@@ -12,6 +12,7 @@ import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
+import type * as lib_activity from "../lib/activity.js";
 import type * as lib_availability from "../lib/availability.js";
 import type * as lib_dates from "../lib/dates.js";
 import type * as lib_db from "../lib/db.js";
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   crons: typeof crons;
   http: typeof http;
+  "lib/activity": typeof lib_activity;
   "lib/availability": typeof lib_availability;
   "lib/dates": typeof lib_dates;
   "lib/db": typeof lib_db;
