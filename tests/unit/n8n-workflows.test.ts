@@ -303,3 +303,21 @@ describe("overdue reminders: Record outcome node", () => {
     );
   });
 });
+
+describe("settings fallback for self-hosted n8n", () => {
+  test("reads environment variables when n8n Variables are unavailable", async () => {
+    const [signed] = await runCode(
+      codeOf("lendloop-overdue-reminders.json", "Sign request"),
+      { $env: { LENDLOOP_INBOUND_SECRET: "env-secret" }, $vars: {} }
+    );
+    expect(
+      await verifyRequest("env-secret", {
+        body: "",
+        method: "GET",
+        path: "/n8n/overdue-loans",
+        signature: String(signed?.json.signature),
+        timestamp: String(signed?.json.timestamp),
+      })
+    ).toEqual({ ok: true });
+  });
+});
