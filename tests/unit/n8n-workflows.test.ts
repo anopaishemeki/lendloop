@@ -199,6 +199,7 @@ describe("overdue reminders: signing and verification nodes", () => {
 
   test("Verify response splits a signed Convex response into loans", async () => {
     const body = JSON.stringify({
+      appUrl: "https://lendloop.example/my/requests",
       loans: [{ loanId: "a" }, { loanId: "b" }],
       reminderDate: "2026-10-30",
     });
@@ -220,7 +221,18 @@ describe("overdue reminders: signing and verification nodes", () => {
       codeOf(FILE, "Verify response"),
       response(headers)
     );
-    expect(items.map((item) => item.json.loanId)).toEqual(["a", "b"]);
+    expect(items.map((item) => item.json)).toEqual([
+      {
+        appUrl: "https://lendloop.example/my/requests",
+        loanId: "a",
+        reminderDate: "2026-10-30",
+      },
+      {
+        appUrl: "https://lendloop.example/my/requests",
+        loanId: "b",
+        reminderDate: "2026-10-30",
+      },
+    ]);
 
     await expect(
       runCode(
@@ -235,7 +247,6 @@ describe("overdue reminders: signing and verification nodes", () => {
 
   test("Sign write-back produces a POST signature Convex accepts", async () => {
     const outcome = {
-      idempotencyKey: "loan1:2026-10-30",
       loanId: "loan1",
       reminderDate: "2026-10-30",
       status: "sent",
@@ -255,5 +266,40 @@ describe("overdue reminders: signing and verification nodes", () => {
         timestamp: String(signed.json.timestamp),
       })
     ).toEqual({ ok: true });
+  });
+});
+
+describe("overdue reminders: Record outcome node", () => {
+  const FILE = "lendloop-overdue-reminders.json";
+  const built = {
+    json: {
+      loanId: "loan1",
+      reminderDate: "2026-10-30",
+      to: "ben@example.test",
+    },
+  };
+  const run = (json: Record<string, unknown>) =>
+    runCode(codeOf(FILE, "Record outcome"), {
+      $: () => ({ item: built }),
+      $json: json,
+    }) as unknown as Promise<{ json: Record<string, unknown> }>;
+
+  test("a successful send becomes status sent", async () => {
+    expect((await run({ id: "re_123" })).json).toEqual({
+      loanId: "loan1",
+      reminderDate: "2026-10-30",
+      status: "sent",
+    });
+  });
+
+  test("an error item becomes status failed with the message", async () => {
+    expect((await run({ error: { message: "503 unavailable" } })).json).toEqual(
+      {
+        error: "503 unavailable",
+        loanId: "loan1",
+        reminderDate: "2026-10-30",
+        status: "failed",
+      }
+    );
   });
 });

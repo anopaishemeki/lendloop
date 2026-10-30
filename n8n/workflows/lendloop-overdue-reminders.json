@@ -75,7 +75,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Convex signs its response too: only email loans this data really came from.\nconst crypto = require('crypto');\nconst MAX_SKEW_SECONDS = 300;\nconst secret = $vars.LENDLOOP_INBOUND_SECRET;\nconst res = $input.first().json;\nconst headers = res.headers || {};\nconst raw = typeof res.body === 'string' ? res.body : null;\nconst timestamp = headers['x-lendloop-timestamp'];\nconst signature = headers['x-lendloop-signature'] || '';\n\nif (raw === null) throw new Error('Expected a text response body (Response Format: Text)');\nif (!timestamp || !signature.startsWith('v1=')) throw new Error('Convex response is not signed');\nif (Math.abs(Date.now() / 1000 - Number(timestamp)) > MAX_SKEW_SECONDS) {\n  throw new Error('Convex response signature is stale');\n}\nconst expected = crypto\n  .createHmac('sha256', secret)\n  .update(`${timestamp}.RESPONSE./n8n/overdue-loans.${raw}`)\n  .digest();\nconst given = Buffer.from(signature.slice(3), 'hex');\nif (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {\n  throw new Error('Convex response signature does not match');\n}\n\n// One item per overdue loan; no loans means the run simply ends here.\nreturn JSON.parse(raw).loans.map((loan) => ({ json: loan }));\n"
+        "jsCode": "// Convex signs its response too: only email loans this data really came from.\nconst crypto = require('crypto');\nconst MAX_SKEW_SECONDS = 300;\nconst secret = $vars.LENDLOOP_INBOUND_SECRET;\nconst res = $input.first().json;\nconst headers = res.headers || {};\nconst raw = typeof res.body === 'string' ? res.body : null;\nconst timestamp = headers['x-lendloop-timestamp'];\nconst signature = headers['x-lendloop-signature'] || '';\n\nif (raw === null) throw new Error('Expected a text response body (Response Format: Text)');\nif (!timestamp || !signature.startsWith('v1=')) throw new Error('Convex response is not signed');\nconst seconds = Number(timestamp);\nif (!Number.isInteger(seconds) || Math.abs(Date.now() / 1000 - seconds) > MAX_SKEW_SECONDS) {\n  throw new Error('Convex response signature is stale');\n}\nconst expected = crypto\n  .createHmac('sha256', secret)\n  .update(`${timestamp}.RESPONSE./n8n/overdue-loans.${raw}`)\n  .digest();\nconst given = Buffer.from(signature.slice(3), 'hex');\nif (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {\n  throw new Error('Convex response signature does not match');\n}\n\n// One item per overdue loan; no loans means the run simply ends here.\nconst { appUrl, loans, reminderDate } = JSON.parse(raw);\nreturn loans.map((loan) => ({ json: { ...loan, appUrl, reminderDate } }));\n"
       },
       "id": "e7d2f4a1-3b6c-4d8e-9f01-a2b3c4d5e604",
       "name": "Verify response",
@@ -142,30 +142,16 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $('Build reminder').item.json;\nreturn {\n  json: {\n    loanId: r.loanId,\n    reminderDate: r.reminderDate,\n    idempotencyKey: r.idempotencyKey,\n    status: 'sent',\n  },\n};\n",
+        "jsCode": "// Both outputs of the send node land here: an error item means the email failed.\nconst r = $('Build reminder').item.json;\nconst outcome = { loanId: r.loanId, reminderDate: r.reminderDate, status: 'sent' };\nif ($json.error) {\n  outcome.status = 'failed';\n  outcome.error = String($json.error.message || 'email provider error');\n}\nreturn { json: outcome };\n",
         "mode": "runOnceForEachItem"
       },
       "id": "e7d2f4a1-3b6c-4d8e-9f01-a2b3c4d5e607",
-      "name": "Mark sent",
+      "name": "Record outcome",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         1320,
-        200
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const r = $('Build reminder').item.json;\nconst message = String($json.error?.message || 'email provider error').slice(0, 300);\nreturn {\n  json: {\n    loanId: r.loanId,\n    reminderDate: r.reminderDate,\n    idempotencyKey: r.idempotencyKey,\n    status: 'failed',\n    error: message,\n  },\n};\n",
-        "mode": "runOnceForEachItem"
-      },
-      "id": "e7d2f4a1-3b6c-4d8e-9f01-a2b3c4d5e608",
-      "name": "Mark failed",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1320,
-        420
+        300
       ]
     },
     {
@@ -280,32 +266,21 @@
       "main": [
         [
           {
-            "node": "Mark sent",
+            "node": "Record outcome",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Mark failed",
+            "node": "Record outcome",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Mark sent": {
-      "main": [
-        [
-          {
-            "node": "Sign write-back",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Mark failed": {
+    "Record outcome": {
       "main": [
         [
           {
