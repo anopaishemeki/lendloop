@@ -14,13 +14,11 @@
     "start": "next start",
     "lint": "ultracite check",
     "lint:fix": "ultracite fix",
-    "format": "ultracite fix",
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.json && tsc --noEmit -p convex/tsconfig.json && tsc --noEmit -p convex/tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:convex": "vitest run --project convex",
-    "test:unit": "vitest run --project unit",
-    "ci": "npm run lint && npm run typecheck && npm test && npm run build"
+    "test:unit": "vitest run --project unit"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.22",
