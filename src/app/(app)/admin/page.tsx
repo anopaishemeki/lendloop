@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
+import { BadgeCheck, ClipboardList, ShieldOff, Wrench } from "lucide-react";
 import Link from "next/link";
 import { AdminLoans } from "@/components/admin/admin-loans";
 import { AdminTools } from "@/components/admin/admin-tools";
@@ -18,7 +19,7 @@ export default function AdminPage() {
   // rendering queries that would fail when a stale session reaches the page.
   if (me && !me.isAdmin) {
     return (
-      <EmptyState title="Admins only">
+      <EmptyState icon={ShieldOff} title="Admins only">
         <Button asChild variant="outline">
           <Link href="/tools">Back to all tools</Link>
         </Button>
@@ -30,21 +31,31 @@ export default function AdminPage() {
     <>
       <PageHeader
         description="Oversee loans, moderate listings and recognise reliable lenders."
+        eyebrow="Neighborhood admin"
         title="Admin"
       />
       <Tabs defaultValue="loans">
-        <TabsList>
-          <TabsTrigger value="loans">All loans</TabsTrigger>
-          <TabsTrigger value="listings">Listings</TabsTrigger>
-          <TabsTrigger value="lenders">Lenders</TabsTrigger>
+        <TabsList className="h-11 rounded-full p-1">
+          <TabsTrigger className="rounded-full px-4" value="loans">
+            <ClipboardList aria-hidden />
+            All loans
+          </TabsTrigger>
+          <TabsTrigger className="rounded-full px-4" value="listings">
+            <Wrench aria-hidden />
+            Listings
+          </TabsTrigger>
+          <TabsTrigger className="rounded-full px-4" value="lenders">
+            <BadgeCheck aria-hidden />
+            Lenders
+          </TabsTrigger>
         </TabsList>
-        <TabsContent className="pt-4" value="loans">
+        <TabsContent className="pt-6" value="loans">
           <AdminLoans />
         </TabsContent>
-        <TabsContent className="pt-4" value="listings">
+        <TabsContent className="pt-6" value="listings">
           <AdminTools />
         </TabsContent>
-        <TabsContent className="pt-4" value="lenders">
+        <TabsContent className="pt-6" value="lenders">
           <AdminUsers />
         </TabsContent>
       </Tabs>

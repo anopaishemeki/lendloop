@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
+import { SearchX } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { RequestDialog } from "@/components/loans/request-dialog";
@@ -36,11 +37,18 @@ function ToolBrowser() {
       <ToolGrid
         actions={(tool) =>
           tool.isMine ? null : (
-            <RequestDialog toolId={tool._id} toolName={tool.name} />
+            <RequestDialog
+              category={tool.category}
+              toolId={tool._id}
+              toolName={tool.name}
+            />
           )
         }
+        emptyAction={<ListToolButton />}
         emptyHint="Be the first to lend something in this category."
-        emptyTitle="No tools here yet"
+        emptyIcon={SearchX}
+        emptyTitle="Nothing here yet"
+        label="Available tools"
         tools={tools}
       />
     </>
@@ -52,11 +60,19 @@ export default function ToolsPage() {
     <>
       <PageHeader
         action={<ListToolButton />}
-        description="Everything your neighbors are happy to lend."
+        description="Everything your neighbors are happy to lend. Pick a tool and ask for the days you need it."
+        eyebrow="The neighborhood shelf"
         title="All tools"
       />
       <Suspense
-        fallback={<ToolGrid emptyHint="" emptyTitle="" tools={undefined} />}
+        fallback={
+          <ToolGrid
+            emptyHint=""
+            emptyTitle=""
+            label="Available tools"
+            tools={undefined}
+          />
+        }
       >
         <ToolBrowser />
       </Suspense>

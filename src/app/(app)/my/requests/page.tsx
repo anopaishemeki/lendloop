@@ -23,7 +23,8 @@ export default function MyRequestsPage() {
   return (
     <>
       <PageHeader
-        description="Tools you've asked to borrow."
+        description="Tools you've asked to borrow, what's out with you now, and what you've returned."
+        eyebrow="Borrowing"
         title="My requests"
       />
       <LoanBoard board={board} copy={COPY} />

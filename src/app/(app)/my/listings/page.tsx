@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
+import { Pencil, Wrench } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { ListToolButton } from "@/components/tools/list-tool-button";
@@ -16,20 +17,27 @@ export default function MyListingsPage() {
     <>
       <PageHeader
         action={<ListToolButton />}
-        description="Tools you're lending to the neighborhood."
+        description="Tools you're lending to the neighborhood. Keep them up to date so neighbors know what to expect."
+        eyebrow="Your shelf"
         title="My listings"
       />
       <ToolGrid
         actions={(tool) => (
           <>
             <Button asChild size="sm" variant="outline">
-              <Link href={`/tools/${tool._id}/edit`}>Edit</Link>
+              <Link href={`/tools/${tool._id}/edit`}>
+                <Pencil aria-hidden />
+                Edit
+              </Link>
             </Button>
             <RemoveToolButton toolId={tool._id} toolName={tool.name} />
           </>
         )}
+        emptyAction={<ListToolButton />}
         emptyHint="A ladder, a tent, a stand mixer: what do you have that sits idle?"
+        emptyIcon={Wrench}
         emptyTitle="You haven't listed anything yet"
+        label="Your tools"
         tools={tools}
       />
     </>

@@ -30,6 +30,7 @@ export function ProfileGate({ children }: { children: ReactNode }) {
   if (failed) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-3 px-6 py-24 text-center">
+        <p className="font-display text-xl">Something went sideways</p>
         <p className="text-muted-foreground">
           We couldn&apos;t load your profile. Check your connection and try
           again.
@@ -42,9 +43,18 @@ export function ProfileGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-10">
-      <Skeleton className="h-8 w-48" />
-      <Skeleton className="h-32 w-full" />
+    <div
+      aria-busy="true"
+      aria-label="Loading your neighborhood board"
+      className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6"
+      role="status"
+    >
+      <Skeleton className="h-10 w-64" />
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 3 }, (_, i) => (
+          <Skeleton className="h-52 rounded-2xl" key={i} />
+        ))}
+      </div>
     </div>
   );
 }

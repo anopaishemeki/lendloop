@@ -2,6 +2,7 @@
 
 import { useMutation } from "convex/react";
 import type { FunctionReference } from "convex/server";
+import { Check, type LucideIcon, PackageCheck, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToastAction } from "@/lib/use-toast-action";
 import { api } from "../../../convex/_generated/api";
@@ -18,12 +19,14 @@ type LoanMutation = FunctionReference<
 function ActionButton({
   loanId,
   mutation,
+  icon: Icon,
   label,
   success,
   variant = "outline",
 }: {
   loanId: Id<"loans">;
   mutation: LoanMutation;
+  icon: LucideIcon;
   label: string;
   success: string;
   variant?: "default" | "outline" | "ghost";
@@ -38,6 +41,7 @@ function ActionButton({
       size="sm"
       variant={variant}
     >
+      <Icon aria-hidden />
       {label}
     </Button>
   );
@@ -49,6 +53,7 @@ export function LoanActions({ loan }: { loan: LoanView }) {
     <>
       {loan.canApprove ? (
         <ActionButton
+          icon={Check}
           label="Approve"
           loanId={loanId}
           mutation={api.loans.approve}
@@ -58,6 +63,7 @@ export function LoanActions({ loan }: { loan: LoanView }) {
       ) : null}
       {loan.canDecline ? (
         <ActionButton
+          icon={X}
           label="Decline"
           loanId={loanId}
           mutation={api.loans.decline}
@@ -66,6 +72,7 @@ export function LoanActions({ loan }: { loan: LoanView }) {
       ) : null}
       {loan.canMarkReturned ? (
         <ActionButton
+          icon={PackageCheck}
           label="Mark returned"
           loanId={loanId}
           mutation={api.loans.markReturned}
@@ -75,6 +82,7 @@ export function LoanActions({ loan }: { loan: LoanView }) {
       ) : null}
       {loan.canCancel ? (
         <ActionButton
+          icon={Undo2}
           label={loan.status === "requested" ? "Withdraw" : "Cancel loan"}
           loanId={loanId}
           mutation={api.loans.cancel}
