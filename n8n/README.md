@@ -19,7 +19,7 @@ Everything else is in the JSON.
 
 ### Values to set in n8n
 
-These live in **n8n Variables**. In n8n Cloud: Overview → Variables. On a self-hosted community install without Variables, use environment variables with the same names (see `n8n/.env.example` and `docker-compose.yml`). The workflows read Variables first, then fall back to the environment.
+These live in **n8n Variables** (the **Variables** page in n8n Cloud). On a self-hosted community install without Variables, use environment variables with the same names (see `n8n/.env.example` and `docker-compose.yml`). Every Code node reads a setting through the same small `setting()` helper: Variables first, then the environment. A missing setting fails the node with a message naming it.
 
 | Name | Value | Must match |
 |---|---|---|
@@ -69,11 +69,27 @@ Error-workflow IDs are specific to each instance, so they can't be stored in the
 4. Set the error workflow on Request notifications and Overdue reminders.
 5. Activate all three workflows. Copy the production webhook URL into Convex as described above.
 
+## Run n8n locally instead (optional)
+
+`docker-compose.yml` at the repo root runs a pinned n8n image for development:
+
+```bash
+cp n8n/.env.example n8n/.env   # set the five settings and WEBHOOK_URL
+docker compose up -d           # editor at http://localhost:5678 (loopback only)
+```
+
+Points to know:
+- **No Variables on community edition.** The settings come from the environment instead. To allow that, the compose file sets `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`, so it deliberately doesn't set n8n's own encryption key in the environment.
+- **Code nodes need `crypto`.** The compose file sets `NODE_FUNCTION_ALLOW_BUILTIN=crypto`.
+- **Convex must reach the webhook.** Convex runs in the cloud, so tunnel only the `/webhook/` path to port 5678 and set `WEBHOOK_URL` to the tunnel URL. The reminders workflow only makes outbound calls.
+
+Then import and configure the workflows as above.
+
 ## Node-by-node configuration
 
 The JSON is the source of truth. This section is for building the workflows by hand in the editor, or for checking an import.
 
-Code nodes use the default **Run Once for All Items** mode unless noted, and their JavaScript is in the export: copy it from the JSON's `jsCode` field. "Retry" means the node's **Settings → Retry On Fail** is on, with **Max Tries 3** and **Wait Between Tries 2000 ms**.
+Code nodes use the default **Run Once for All Items** mode unless noted, and their JavaScript is in the export: copy it from the JSON's `jsCode` field. Settings are read only inside Code nodes. HTTP nodes take URLs and sender addresses from the previous node's output (`$json.url`, `$json.from`), so expressions never touch `$vars` or `$env`. "Retry" means the node's **Settings → Retry On Fail** is on, with **Max Tries 3** and **Wait Between Tries 2000 ms**.
 
 ### 1. LendLoop - Request notifications
 
@@ -97,13 +113,13 @@ Workflow settings:
 **Signature valid?** (If): `{{ $json.valid }}` is true.
 - false → **Respond 401** (Respond to Webhook, JSON, response code 401, `{ "error": "invalid signature" }`).
 
-**Build email** (Code): builds the subject and text for the event from the minimized payload. Output: `{ eventId, to, subject, text }`.
+**Build email** (Code): builds the subject and text for the event from the minimized payload. Output: `{ eventId, from, to, subject, text }`.
 
 **Send email (Resend)** (HTTP Request)
 - POST `https://api.resend.com/emails`
 - Authentication: Generic Credential Type → Header Auth → `Resend API`
 - Send Headers: `Idempotency-Key` = `{{ 'lendloop-' + $json.eventId }}`
-- Body: JSON, `{{ JSON.stringify({ from: ($vars.RESEND_FROM || $env.RESEND_FROM), to: [$json.to], subject: $json.subject, text: $json.text }) }}`
+- Body: JSON, `{{ JSON.stringify({ from: $json.from, to: [$json.to], subject: $json.subject, text: $json.text }) }}`
 - Timeout: 10000
 - Retry: on
 - Settings → On Error: Continue (using error output)
@@ -120,7 +136,7 @@ Its outputs:
 
 Both of those then go to **Fail execution** (Stop and Error), so the error workflow raises an alert.
 
-Convex retries any non-2xx except 4xx (408 and 429 are retried), for up to 6 attempts over about 20 minutes. Resend's idempotency key means a retry after an email was actually sent doesn't send it twice.
+Convex retries 5xx, 408 and 429 responses (and network errors), for up to 6 attempts over about 20 minutes. Other responses are final. Resend's idempotency key means a retry after an email was actually sent doesn't send it twice.
 
 ### 2. LendLoop - Overdue reminders
 
@@ -128,20 +144,20 @@ Workflow settings: as above, plus **Timezone: UTC**, because reminder dates are 
 
 **Every day at 08:00 UTC** (Schedule Trigger): Days, hour 8.
 
-**Sign request** (Code): signs `"<ts>.GET./n8n/overdue-loans."` with `LENDLOOP_INBOUND_SECRET`. Output: `{ timestamp, signature }`.
+**Sign request** (Code): signs `"<ts>.GET./n8n/overdue-loans."` with `LENDLOOP_INBOUND_SECRET`. Output: `{ url, timestamp, signature }`.
 
 **Fetch overdue loans** (HTTP Request)
-- GET `{{ ($vars.LENDLOOP_CONVEX_SITE_URL || $env.LENDLOOP_CONVEX_SITE_URL) }}/n8n/overdue-loans`
+- GET `{{ $json.url }}`
 - Send Headers: `X-LendLoop-Timestamp` = `{{ $json.timestamp }}`, `X-LendLoop-Signature` = `{{ $json.signature }}`
 - Options → Response: Include Response Headers and Status on, Response Format Text
 - Timeout: 15000
-- Retry: on
+- Retry: **off**. Convex accepts this signature only once, to stop replays that would hand out borrower emails, so a retry would reuse a spent signature. A failed fetch fails the run and alerts ops; re-running the workflow is safe.
 
 **Verify response** (Code)
 - Convex signs its response with the method `RESPONSE`. This node checks that signature and its freshness, and throws if either is wrong, which fails the run and alerts ops.
 - Outputs one item per overdue loan. When nothing is overdue the run simply ends here.
 
-**Build reminder** (Code, Run Once for Each Item): `{ loanId, reminderDate, idempotencyKey, to, subject, text }`.
+**Build reminder** (Code, Run Once for Each Item): `{ loanId, reminderDate, idempotencyKey, from, to, subject, text }`.
 
 **Send reminder (Resend)** (HTTP Request)
 - Configured like *Send email* above, with `Idempotency-Key` = `{{ 'lendloop-reminder-' + $json.idempotencyKey }}`
@@ -150,10 +166,10 @@ Workflow settings: as above, plus **Timezone: UTC**, because reminder dates are 
 
 **Record outcome** (Code, Run Once for Each Item): `{ loanId, reminderDate, status: 'sent' | 'failed', error? }`.
 
-**Sign write-back** (Code, Run Once for Each Item): signs `"<ts>.POST./n8n/reminders.<body>"`. Output: `{ body, timestamp, signature }`.
+**Sign write-back** (Code, Run Once for Each Item): signs `"<ts>.POST./n8n/reminders.<body>"`. Output: `{ url, body, timestamp, signature }`.
 
 **Write back to Convex** (HTTP Request)
-- POST `{{ ($vars.LENDLOOP_CONVEX_SITE_URL || $env.LENDLOOP_CONVEX_SITE_URL) }}/n8n/reminders`
+- POST `{{ $json.url }}`
 - Signature headers as above
 - Body: Raw, content type `application/json`, `{{ $json.body }}`
 - Retry: on
@@ -162,7 +178,7 @@ Convex stores at most one reminder per loan per day, so retries and re-runs are 
 
 ### 3. LendLoop - Error handler
 
-**Error Trigger** → **Format alert** (Code) → **Email ops (Resend)** (HTTP Request to `OPS_ALERT_EMAIL`, retry on).
+**Error Trigger** → **Format alert** (Code; outputs `from` = `RESEND_FROM` and `to` = `OPS_ALERT_EMAIL`) → **Email ops (Resend)** (HTTP Request, retry on).
 
 The alert contains:
 - the workflow name

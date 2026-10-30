@@ -164,14 +164,11 @@ npm run dev   # http://localhost:3000
 
 ### 5. n8n Cloud
 
-Follow [`n8n/README.md`](n8n/README.md). In short:
-1. Create the five Variables and the `Resend API` Header Auth credential.
-2. Import the three workflows from `n8n/workflows/`.
-3. Set **LendLoop - Error handler** as the error workflow on the other two.
-4. Activate all three.
-5. Copy the **production** webhook URL of *Request notifications* into the Convex env variable `N8N_REQUEST_WEBHOOK_URL`.
-
-**Running n8n locally instead.** `docker compose up -d` starts n8n with the settings the workflows need (`n8n/.env.example` lists the values). The workflows are instance-agnostic: only the webhook base URL, the credential and the five settings change. Convex runs in the cloud, so a local n8n must be reachable from the internet (for example through a tunnel) to receive request events.
+Follow [`n8n/README.md`](n8n/README.md). It covers:
+- the five settings and the Resend credential
+- importing the three workflows and linking the error workflow
+- copying the **production** webhook URL into the Convex env variable `N8N_REQUEST_WEBHOOK_URL`
+- running n8n locally with `docker compose` instead of n8n Cloud
 
 ### 6. Make yourself admin
 
@@ -197,9 +194,7 @@ In Clerk, open your user → **Metadata → Public** and set `{"role": "admin"}`
 | `N8N_OUTBOUND_SECRET` | Signs Convex → n8n requests |
 | `N8N_INBOUND_SECRET` | Verifies n8n → Convex requests and signs the overdue response |
 
-**n8n Variables** (on self-hosted community installs, environment variables): `LENDLOOP_CONVEX_SITE_URL`, `LENDLOOP_OUTBOUND_SECRET`, `LENDLOOP_INBOUND_SECRET`, `RESEND_FROM`, `OPS_ALERT_EMAIL`.
-
-**n8n credential:** `Resend API` (Header Auth: `Authorization: Bearer re_...`).
+**n8n:** five settings and one credential, listed with their matching Convex values in [`n8n/README.md`](n8n/README.md#what-you-enter-by-hand).
 
 No secret is in the code or in the exported workflow JSON.
 
@@ -266,8 +261,8 @@ There are two roles:
 ## Reliability and error handling
 
 **Convex → n8n**
-- Delivery runs on `@convex-dev/workpool`, retried up to 6 times with exponential backoff (about 20 minutes).
-- 4xx responses (other than 408 and 429) are not retried.
+- Delivery runs on `@convex-dev/workpool`: up to 6 attempts with exponential backoff (about 20 minutes).
+- Only 5xx, 408, 429 and network errors are retried.
 - Each attempt is counted in the same transaction that snapshots the payload.
 - Failures are recorded on the outbox row and logged.
 - After fixing an outage, run `npx convex run notifications:redriveFailed` to resend failed events.
@@ -276,7 +271,7 @@ There are two roles:
 - n8n sends with a Resend `Idempotency-Key` derived from the event ID, so a retried delivery never sends a second email.
 
 **n8n**
-- HTTP nodes use Retry On Fail.
+- HTTP nodes use Retry On Fail. The exception is the overdue-loans GET, whose signature Convex accepts only once; a failed fetch fails the run, and a re-run is safe.
 - The Resend node routes errors to an error output. The workflow answers 502 (retryable) or 422 (permanent) and then fails the run on purpose, so the **Error handler** emails `OPS_ALERT_EMAIL`. Failures never go unnoticed.
 
 **Write-back idempotency**
@@ -313,7 +308,7 @@ There are two roles:
 ## Assumptions and what is not verified end to end
 
 **Verified:**
-- by tests (130 total: Convex functions via `convex-test`, HTTP endpoints via `t.fetch`, and the exported n8n Code-node JavaScript run in Node):
+- by tests (133 total: Convex functions via `convex-test`, HTTP endpoints via `t.fetch`, and the exported n8n Code-node JavaScript run in Node):
   - RBAC
   - the state machine, overlap and date rules
   - payload minimization
@@ -331,7 +326,7 @@ There are two roles:
 The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import) cover these.
 
 **Assumptions:**
-- **n8n Variables** are a paid-plan feature. The Cloud trial includes them; on plans without them, use environment variables (self-hosted) or add the values to a Set node and keep it out of exports.
+- **n8n Variables** are a paid-plan feature. The Cloud trial includes them; self-hosted installs without them use environment variables.
 - **Resend sender:** with Resend's test sender (`onboarding@resend.dev`), mail only reaches the account owner's address until a domain is verified.
 - **Error workflow:** its link to the other workflows is instance-specific, so it is set by hand after import.
 
@@ -367,7 +362,7 @@ The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import
     - You take on TLS, backups, upgrades, scaling (Redis queue mode) and security patching.
     - Variables are a licensed feature on self-hosted installs, so without a license use environment variables (the workflows already support this) or external secrets.
     - Choose it when compliance or volume justifies the operational load.
-  - **Either way** the workflow JSON is unchanged. Re-create the credential and the five settings, re-link the error workflow, and update `N8N_REQUEST_WEBHOOK_URL`.
+  - **Either way** the workflow JSON is unchanged; see [`n8n/README.md`](n8n/README.md) for the per-instance values.
 
 ## Project layout
 
