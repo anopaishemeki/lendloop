@@ -23,7 +23,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Signs the request for overdue loans. Secret: n8n Variable LENDLOOP_INBOUND_SECRET\n// (same value as Convex env N8N_INBOUND_SECRET).\nconst crypto = require('crypto');\nconst secret = $vars.LENDLOOP_INBOUND_SECRET;\nif (!secret) throw new Error('LENDLOOP_INBOUND_SECRET is not set');\n\nconst path = '/n8n/overdue-loans';\nconst timestamp = Math.floor(Date.now() / 1000).toString();\nconst signature = 'v1=' + crypto\n  .createHmac('sha256', secret)\n  .update(`${timestamp}.GET.${path}.`)\n  .digest('hex');\nreturn [{ json: { timestamp, signature } }];\n"
+        "jsCode": "// Settings come from n8n Variables; self-hosted community installs without\n// Variables fall back to environment variables of the same name.\nfunction setting(name) {\n  try { return $vars?.[name] || $env[name]; } catch (error) { return undefined; }\n}\nfunction required(name) {\n  const value = setting(name);\n  if (!value) throw new Error(`${name} is not set (n8n Variable or environment variable)`);\n  return value;\n}\n\n// Signs the request for overdue loans. Secret: n8n Variable LENDLOOP_INBOUND_SECRET\n// (same value as Convex env N8N_INBOUND_SECRET).\nconst crypto = require('crypto');\nconst secret = required('LENDLOOP_INBOUND_SECRET');\n\nconst path = '/n8n/overdue-loans';\nconst url = required('LENDLOOP_CONVEX_SITE_URL').replace(/\\/+$/, '') + path;\nconst timestamp = Math.floor(Date.now() / 1000).toString();\nconst signature = 'v1=' + crypto\n  .createHmac('sha256', secret)\n  .update(`${timestamp}.GET.${path}.`)\n  .digest('hex');\nreturn [{ json: { url, timestamp, signature } }];\n"
       },
       "id": "e7d2f4a1-3b6c-4d8e-9f01-a2b3c4d5e602",
       "name": "Sign request",
@@ -37,7 +37,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $vars.LENDLOOP_CONVEX_SITE_URL }}/n8n/overdue-loans",
+        "url": "={{ $json.url }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -68,14 +68,11 @@
       "position": [
         440,
         300
-      ],
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 2000
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// Convex signs its response too: only email loans this data really came from.\nconst crypto = require('crypto');\nconst MAX_SKEW_SECONDS = 300;\nconst secret = $vars.LENDLOOP_INBOUND_SECRET;\nconst res = $input.first().json;\nconst headers = res.headers || {};\nconst raw = typeof res.body === 'string' ? res.body : null;\nconst timestamp = headers['x-lendloop-timestamp'];\nconst signature = headers['x-lendloop-signature'] || '';\n\nif (raw === null) throw new Error('Expected a text response body (Response Format: Text)');\nif (!timestamp || !signature.startsWith('v1=')) throw new Error('Convex response is not signed');\nconst seconds = Number(timestamp);\nif (!Number.isInteger(seconds) || Math.abs(Date.now() / 1000 - seconds) > MAX_SKEW_SECONDS) {\n  throw new Error('Convex response signature is stale');\n}\nconst expected = crypto\n  .createHmac('sha256', secret)\n  .update(`${timestamp}.RESPONSE./n8n/overdue-loans.${raw}`)\n  .digest();\nconst given = Buffer.from(signature.slice(3), 'hex');\nif (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {\n  throw new Error('Convex response signature does not match');\n}\n\n// One item per overdue loan; no loans means the run simply ends here.\nconst { appUrl, loans, reminderDate } = JSON.parse(raw);\nreturn loans.map((loan) => ({ json: { ...loan, appUrl, reminderDate } }));\n"
+        "jsCode": "// Settings come from n8n Variables; self-hosted community installs without\n// Variables fall back to environment variables of the same name.\nfunction setting(name) {\n  try { return $vars?.[name] || $env[name]; } catch (error) { return undefined; }\n}\nfunction required(name) {\n  const value = setting(name);\n  if (!value) throw new Error(`${name} is not set (n8n Variable or environment variable)`);\n  return value;\n}\n\n// Convex signs its response too: only email loans this data really came from.\nconst crypto = require('crypto');\nconst MAX_SKEW_SECONDS = 300;\nconst secret = setting('LENDLOOP_INBOUND_SECRET');\nconst res = $input.first().json;\nconst headers = res.headers || {};\nconst raw = typeof res.body === 'string' ? res.body : null;\nconst timestamp = headers['x-lendloop-timestamp'];\nconst signature = headers['x-lendloop-signature'] || '';\n\nif (raw === null) throw new Error('Expected a text response body (Response Format: Text)');\nif (!timestamp || !signature.startsWith('v1=')) throw new Error('Convex response is not signed');\nconst seconds = Number(timestamp);\nif (!Number.isInteger(seconds) || Math.abs(Date.now() / 1000 - seconds) > MAX_SKEW_SECONDS) {\n  throw new Error('Convex response signature is stale');\n}\nconst expected = crypto\n  .createHmac('sha256', secret)\n  .update(`${timestamp}.RESPONSE./n8n/overdue-loans.${raw}`)\n  .digest();\nconst given = Buffer.from(signature.slice(3), 'hex');\nif (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {\n  throw new Error('Convex response signature does not match');\n}\n\n// One item per overdue loan; no loans means the run simply ends here.\nconst { appUrl, loans, reminderDate } = JSON.parse(raw);\nreturn loans.map((loan) => ({ json: { ...loan, appUrl, reminderDate } }));\n"
       },
       "id": "e7d2f4a1-3b6c-4d8e-9f01-a2b3c4d5e604",
       "name": "Verify response",
@@ -88,7 +85,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const loan = $json;\nconst days = loan.daysOverdue === 1 ? '1 day' : `${loan.daysOverdue} days`;\nreturn {\n  json: {\n    loanId: loan.loanId,\n    reminderDate: loan.reminderDate,\n    idempotencyKey: loan.idempotencyKey,\n    to: loan.borrower.email,\n    subject: `Reminder: please return the ${loan.toolName}`,\n    text: `Hi ${loan.borrower.firstName},\\n\\nThe ${loan.toolName} you borrowed from ${loan.ownerFirstName} was due back on ${loan.dueDate} (${days} ago). Please arrange to return it soon.\\n${loan.appUrl}\\n\\n- LendLoop`,\n  },\n};\n",
+        "jsCode": "// Settings come from n8n Variables; self-hosted community installs without\n// Variables fall back to environment variables of the same name.\nfunction setting(name) {\n  try { return $vars?.[name] || $env[name]; } catch (error) { return undefined; }\n}\nfunction required(name) {\n  const value = setting(name);\n  if (!value) throw new Error(`${name} is not set (n8n Variable or environment variable)`);\n  return value;\n}\n\nconst loan = $json;\nconst days = loan.daysOverdue === 1 ? '1 day' : `${loan.daysOverdue} days`;\nreturn {\n  json: {\n    loanId: loan.loanId,\n    reminderDate: loan.reminderDate,\n    idempotencyKey: loan.idempotencyKey,\n    from: required('RESEND_FROM'),\n    to: loan.borrower.email,\n    subject: `Reminder: please return the ${loan.toolName}`,\n    text: `Hi ${loan.borrower.firstName},\\n\\nThe ${loan.toolName} you borrowed from ${loan.ownerFirstName} was due back on ${loan.dueDate} (${days} ago). Please arrange to return it soon.\\n${loan.appUrl}\\n\\n- LendLoop`,\n  },\n};\n",
         "mode": "runOnceForEachItem"
       },
       "id": "e7d2f4a1-3b6c-4d8e-9f01-a2b3c4d5e605",
@@ -108,7 +105,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ from: $vars.RESEND_FROM, to: [$json.to], subject: $json.subject, text: $json.text }) }}",
+        "jsonBody": "={{ JSON.stringify({ from: $json.from, to: [$json.to], subject: $json.subject, text: $json.text }) }}",
         "options": {
           "timeout": 10000
         },
@@ -156,7 +153,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Signs the reminder outcome; Convex stores it once per loan per day.\nconst crypto = require('crypto');\nconst secret = $vars.LENDLOOP_INBOUND_SECRET;\nif (!secret) throw new Error('LENDLOOP_INBOUND_SECRET is not set');\n\nconst body = JSON.stringify($json);\nconst timestamp = Math.floor(Date.now() / 1000).toString();\nconst signature = 'v1=' + crypto\n  .createHmac('sha256', secret)\n  .update(`${timestamp}.POST./n8n/reminders.${body}`)\n  .digest('hex');\nreturn { json: { body, timestamp, signature } };\n",
+        "jsCode": "// Settings come from n8n Variables; self-hosted community installs without\n// Variables fall back to environment variables of the same name.\nfunction setting(name) {\n  try { return $vars?.[name] || $env[name]; } catch (error) { return undefined; }\n}\nfunction required(name) {\n  const value = setting(name);\n  if (!value) throw new Error(`${name} is not set (n8n Variable or environment variable)`);\n  return value;\n}\n\n// Signs the reminder outcome; Convex stores it once per loan per day.\nconst crypto = require('crypto');\nconst secret = required('LENDLOOP_INBOUND_SECRET');\n\nconst body = JSON.stringify($json);\nconst url = required('LENDLOOP_CONVEX_SITE_URL').replace(/\\/+$/, '') + '/n8n/reminders';\nconst timestamp = Math.floor(Date.now() / 1000).toString();\nconst signature = 'v1=' + crypto\n  .createHmac('sha256', secret)\n  .update(`${timestamp}.POST./n8n/reminders.${body}`)\n  .digest('hex');\nreturn { json: { url, body, timestamp, signature } };\n",
         "mode": "runOnceForEachItem"
       },
       "id": "e7d2f4a1-3b6c-4d8e-9f01-a2b3c4d5e609",
@@ -171,7 +168,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $vars.LENDLOOP_CONVEX_SITE_URL }}/n8n/reminders",
+        "url": "={{ $json.url }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
