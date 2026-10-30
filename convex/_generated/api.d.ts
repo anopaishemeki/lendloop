@@ -10,6 +10,7 @@
 
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
+import type * as http from "../http.js";
 import type * as lib_availability from "../lib/availability.js";
 import type * as lib_dates from "../lib/dates.js";
 import type * as lib_db from "../lib/db.js";
@@ -22,6 +23,7 @@ import type * as lib_users from "../lib/users.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as loans from "../loans.js";
 import type * as notifications from "../notifications.js";
+import type * as reminders from "../reminders.js";
 import type * as tools from "../tools.js";
 import type * as users from "../users.js";
 
@@ -34,6 +36,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auth: typeof auth;
+  http: typeof http;
   "lib/availability": typeof lib_availability;
   "lib/dates": typeof lib_dates;
   "lib/db": typeof lib_db;
@@ -46,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   "lib/validators": typeof lib_validators;
   loans: typeof loans;
   notifications: typeof notifications;
+  reminders: typeof reminders;
   tools: typeof tools;
   users: typeof users;
 }>;
