@@ -81,6 +81,9 @@ docker compose up -d           # editor at http://localhost:5678 (loopback only)
 Points to know:
 - **No Variables on community edition.** The settings come from the environment instead. To allow that, the compose file sets `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`, so it deliberately doesn't set n8n's own encryption key in the environment.
 - **Code nodes need `crypto`.** The compose file sets `NODE_FUNCTION_ALLOW_BUILTIN=crypto`.
+- **n8n 1.x differences.** The workflows run on 1.x as well as newer releases (tested on self-hosted 1.123):
+  - Code nodes lack several Node globals, including `URL`, `URLSearchParams`, `fetch` and `structuredClone`, so the Code nodes don't use them. `tests/unit/n8n-workflows.test.ts` runs each node in a sandbox with only the globals n8n provides, and `require` limited to `NODE_FUNCTION_ALLOW_BUILTIN`, so a node that relies on anything else fails its tests.
+  - A full text HTTP response goes to `data` by default on 1.x, so **Fetch overdue loans** names its output field `body` explicitly.
 - **Convex must reach the webhook.** Convex runs in the cloud, so tunnel only the `/webhook/` path to port 5678 and set `WEBHOOK_URL` to the tunnel URL. The reminders workflow only makes outbound calls.
 
 Then import and configure the workflows as above.
@@ -149,7 +152,7 @@ Workflow settings: as above, plus **Timezone: UTC**, because reminder dates are 
 **Fetch overdue loans** (HTTP Request)
 - GET `{{ $json.url }}`
 - Send Headers: `X-LendLoop-Timestamp` = `{{ $json.timestamp }}`, `X-LendLoop-Signature` = `{{ $json.signature }}`
-- Options → Response: Include Response Headers and Status on, Response Format Text
+- Options → Response: Include Response Headers and Status on, Response Format Text, Put Output in Field `body`
 - Timeout: 15000
 - Retry: **off**. Convex accepts this signature only once, to stop replays that would hand out borrower emails, so a retry would reuse a spent signature. A failed fetch fails the run and alerts ops; re-running the workflow is safe.
 

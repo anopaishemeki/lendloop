@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import vm from "node:vm";
 import { describe, expect, test } from "vitest";
 import { signRequest, verifyRequest } from "../../convex/lib/hmac";
 
@@ -10,8 +11,18 @@ type N8nNode = {
   parameters: { jsCode?: string };
 };
 
+const ROOT = path.resolve(import.meta.dirname, "../..");
+const WORKFLOWS = path.join(ROOT, "n8n/workflows");
+// The builtins Code nodes may require, from the same setting n8n runs with.
+const ALLOWED_BUILTINS = new Set(
+  readFileSync(path.join(ROOT, "docker-compose.yml"), "utf8")
+    .split("\n")
+    .find((line) => line.trim().startsWith("NODE_FUNCTION_ALLOW_BUILTIN:"))
+    ?.split(":")[1]
+    ?.trim()
+    .split(",")
+);
 const nodeRequire = createRequire(import.meta.url);
-const WORKFLOWS = path.resolve(import.meta.dirname, "../../n8n/workflows");
 const SECRET = "shared-outbound-secret";
 const WEBHOOK_URL =
   "https://example.app.n8n.cloud/webhook/lendloop/request-events";
@@ -26,31 +37,51 @@ function codeOf(file: string, nodeName: string): string {
   return node.parameters.jsCode;
 }
 
-/** Runs an n8n Code node body with the globals n8n provides. */
+/**
+ * Runs an n8n Code node body in a fresh context holding only the globals n8n's
+ * sandbox provides (checked on n8n 1.123) plus the node's own, so code that
+ * relies on anything else (URL, fetch, a disallowed builtin) fails here too.
+ */
 async function runCode(
   js: string,
   globals: Record<string, unknown>,
   self: unknown = {}
 ) {
-  const AsyncFunction = Object.getPrototypeOf(async () => undefined)
-    .constructor as new (
-    ...args: string[]
-  ) => (...values: unknown[]) => Promise<{ json: Record<string, unknown> }[]>;
-  const names = ["require", ...Object.keys(globals)];
-  const fn = new AsyncFunction(...names, js);
-  return await fn.call(self, nodeRequire, ...Object.values(globals));
+  const context = vm.createContext({
+    atob,
+    Buffer,
+    btoa,
+    console,
+    setTimeout,
+    TextDecoder,
+    TextEncoder,
+    ...globals,
+    require: (name: string) => {
+      if (!ALLOWED_BUILTINS.has(name)) {
+        throw new Error(`Module '${name}' is disallowed`);
+      }
+      return nodeRequire(name);
+    },
+  });
+  const fn = vm.runInContext(`(async function () {\n${js}\n})`, context) as (
+    this: unknown
+  ) => Promise<{ json: Record<string, unknown> }[]>;
+  return await fn.call(self);
 }
 
 async function verify(
   body: string,
   headers: Record<string, string>,
-  secret = SECRET
+  {
+    secret = SECRET,
+    webhookUrl = WEBHOOK_URL,
+  }: { secret?: string; webhookUrl?: string | null } = {}
 ) {
   const [result] = await runCode(
     codeOf("lendloop-request-notifications.json", "Verify signature"),
     {
       $input: {
-        first: () => ({ json: { body: {}, headers, webhookUrl: WEBHOOK_URL } }),
+        first: () => ({ json: { body: {}, headers, webhookUrl } }),
       },
       $vars: { LENDLOOP_OUTBOUND_SECRET: secret },
     },
@@ -91,7 +122,8 @@ describe("request notifications: Verify signature node", () => {
 
   test("rejects the wrong secret, stale requests and missing headers", async () => {
     expect(
-      (await verify(body, await signedHeaders(body), "other"))?.reason
+      (await verify(body, await signedHeaders(body), { secret: "other" }))
+        ?.reason
     ).toBe("mismatch");
     expect(
       (await verify(body, await signedHeaders(body, Date.now() - 600_000)))
@@ -127,9 +159,32 @@ describe("request notifications: Verify signature node", () => {
   });
 
   test("fails closed when the n8n variable is not set", async () => {
-    expect((await verify(body, await signedHeaders(body), ""))?.reason).toBe(
-      "not configured"
-    );
+    expect(
+      (await verify(body, await signedHeaders(body), { secret: "" }))?.reason
+    ).toBe("not configured");
+  });
+
+  test("signs over the webhook path whatever the origin, query or fragment", async () => {
+    const headers = await signedHeaders(body);
+    for (const url of [
+      "http://localhost:5678/webhook/lendloop/request-events",
+      "https://n8n.example/webhook/lendloop/request-events?x=1#top",
+    ]) {
+      expect((await verify(body, headers, { webhookUrl: url }))?.valid).toBe(
+        true
+      );
+    }
+    expect(
+      (await verify(body, headers, { webhookUrl: "https://n8n.example/other" }))
+        ?.reason
+    ).toBe("mismatch");
+  });
+
+  test("rejects instead of crashing when the webhook URL is missing", async () => {
+    expect(
+      (await verify(body, await signedHeaders(body), { webhookUrl: null }))
+        ?.reason
+    ).toBe("no webhook URL");
   });
 });
 
@@ -216,19 +271,25 @@ describe("overdue reminders: signing and verification nodes", () => {
       method: "RESPONSE",
       path: "/n8n/overdue-loans",
     });
-    const response = (sent: Record<string, string>, text = body) => ({
-      $input: { first: () => ({ json: { body: text, headers: sent } }) },
-      $vars: vars,
-    });
     const headers = {
       "x-lendloop-signature": signature,
       "x-lendloop-timestamp": timestamp,
     };
+    const verifyResponse = ({
+      sent = headers,
+      text = body,
+      settings = vars,
+    }: {
+      sent?: Record<string, string>;
+      text?: string;
+      settings?: Record<string, string>;
+    }) =>
+      runCode(codeOf(FILE, "Verify response"), {
+        $input: { first: () => ({ json: { body: text, headers: sent } }) },
+        $vars: settings,
+      });
 
-    const items = await runCode(
-      codeOf(FILE, "Verify response"),
-      response(headers)
-    );
+    const items = await verifyResponse({});
     expect(items.map((item) => item.json)).toEqual([
       {
         appUrl: "https://lendloop.example/my/requests",
@@ -243,14 +304,12 @@ describe("overdue reminders: signing and verification nodes", () => {
     ]);
 
     await expect(
-      runCode(
-        codeOf(FILE, "Verify response"),
-        response(headers, body.replace('"a"', '"z"'))
-      )
+      verifyResponse({ text: body.replace('"a"', '"z"') })
     ).rejects.toThrow(/does not match/u);
-    await expect(
-      runCode(codeOf(FILE, "Verify response"), response({}))
-    ).rejects.toThrow(/not signed/u);
+    await expect(verifyResponse({ sent: {} })).rejects.toThrow(/not signed/u);
+    await expect(verifyResponse({ settings: {} })).rejects.toThrow(
+      /LENDLOOP_INBOUND_SECRET is not set/u
+    );
   });
 
   test("Sign write-back produces a POST signature Convex accepts", async () => {
