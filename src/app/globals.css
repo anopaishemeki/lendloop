@@ -24,7 +24,8 @@
   --muted-foreground: oklch(0.5 0.02 65);
   --accent: oklch(0.93 0.035 55);
   --accent-foreground: oklch(0.42 0.1 40);
-  --terracotta: oklch(0.62 0.135 42);
+  /* Dark enough for small text on paper (AA). */
+  --terracotta: oklch(0.5 0.13 40);
   --destructive: oklch(0.56 0.2 27);
   --success: oklch(0.52 0.12 152);
   --warning: oklch(0.7 0.14 72);
@@ -59,7 +60,7 @@
 
 @theme inline {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Fraunces Variable", ui-serif, Georgia, serif;
+  --font-serif: var(--font-fraunces), ui-serif, Georgia, serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -96,12 +97,21 @@
     font-feature-settings: "ss01", "cv11";
     @apply bg-background text-foreground antialiased;
   }
-  h1,
-  h2,
-  h3 {
-    font-optical-sizing: auto;
-    @apply font-serif tracking-tight;
-  }
+}
+
+/* Display headings in Fraunces; opt in where wanted so widgets keep Geist. */
+@utility font-display {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+  letter-spacing: -0.015em;
+}
+
+/* The shared card shell used by tool, loan, form and table cards. */
+@utility surface {
+  background-color: var(--card);
+  border-width: 1px;
+  border-radius: calc(var(--radius) + 4px);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 }
 
 @layer utilities {
