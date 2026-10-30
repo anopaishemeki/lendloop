@@ -9,14 +9,24 @@ import {
   requireViewer,
   type Viewer,
 } from "./auth";
-import { availabilityOf } from "./lib/availability";
+import {
+  availabilityOf,
+  availabilityValidator,
+  isOnLoan,
+} from "./lib/availability";
 import { todayUtc } from "./lib/dates";
+import { transitionLoan } from "./lib/loans";
 import { cleanText } from "./lib/text";
-import { categoryValidator, conditionValidator } from "./lib/validators";
+import {
+  categoryValidator,
+  conditionValidator,
+  TOOL_DESCRIPTION_MAX,
+  TOOL_NAME_MAX,
+  TOOL_NAME_MIN,
+} from "./lib/validators";
 
-const NAME_MAX = 80;
-const DESCRIPTION_MAX = 500;
 const PUBLIC_LIMIT = 100;
+const PUBLIC_BATCH = 25;
 
 const toolFields = {
   category: categoryValidator,
@@ -27,7 +37,7 @@ const toolFields = {
 
 const toolView = v.object({
   _id: v.id("tools"),
-  availability: v.union(v.literal("available"), v.literal("on_loan")),
+  availability: availabilityValidator,
   category: categoryValidator,
   condition: conditionValidator,
   description: v.string(),
@@ -36,21 +46,33 @@ const toolView = v.object({
   owner: v.object({ firstName: v.string(), isTrustedLender: v.boolean() }),
 });
 
+const publicToolView = v.object({
+  category: categoryValidator,
+  name: v.string(),
+});
+
 function firstName(name: string) {
   return name.split(" ")[0] || name;
 }
 
 function cleanFields(args: { name: string; description: string }) {
   return {
-    description: cleanText(args.description, "Description", 0, DESCRIPTION_MAX),
-    name: cleanText(args.name, "Name", 2, NAME_MAX),
+    description: cleanText(
+      args.description,
+      "Description",
+      0,
+      TOOL_DESCRIPTION_MAX
+    ),
+    name: cleanText(args.name, "Name", TOOL_NAME_MIN, TOOL_NAME_MAX),
   };
 }
 
 /** Builds card views, loading each owner once per query instead of once per tool. */
 function viewBuilder(ctx: QueryCtx, viewer: Viewer) {
   const today = todayUtc();
-  const owners = new Map<Id<"users">, Promise<Doc<"users"> | null>>();
+  const owners = new Map<Id<"users">, Promise<Doc<"users"> | null>>([
+    [viewer.user._id, Promise.resolve(viewer.user)],
+  ]);
   const ownerOf = (id: Id<"users">) => {
     let owner = owners.get(id);
     if (!owner) {
@@ -97,39 +119,52 @@ export const listPublic = query({
   args: {},
   handler: async (ctx) => {
     const today = todayUtc();
-    const visible: { category: Doc<"tools">["category"]; name: string }[] = [];
+    const visible: (typeof publicToolView.type)[] = [];
+    let batch: Doc<"tools">[] = [];
+
+    const flush = async () => {
+      const availability = await Promise.all(
+        batch.map((tool) => availabilityOf(ctx, tool._id, today))
+      );
+      batch.forEach((tool, i) => {
+        if (availability[i] === "available" && visible.length < PUBLIC_LIMIT) {
+          visible.push({ category: tool.category, name: tool.name });
+        }
+      });
+      batch = [];
+    };
+
     const listed = ctx.db
       .query("tools")
       .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined))
       .order("desc");
     for await (const tool of listed) {
-      if ((await availabilityOf(ctx, tool._id, today)) === "available") {
-        visible.push({ category: tool.category, name: tool.name });
+      batch.push(tool);
+      if (batch.length === PUBLIC_BATCH) {
+        await flush();
         if (visible.length >= PUBLIC_LIMIT) break;
       }
     }
+    await flush();
     return visible;
   },
-  returns: v.array(v.object({ category: categoryValidator, name: v.string() })),
+  returns: v.array(publicToolView),
 });
 
 export const list = query({
   args: { category: v.optional(categoryValidator) },
   handler: async (ctx, { category }) => {
     const viewer = await requireViewer(ctx);
-    const tools = category
-      ? await ctx.db
+    const listed = category
+      ? ctx.db
           .query("tools")
           .withIndex("by_category_and_removed_at", (q) =>
             q.eq("category", category).eq("removedAt", undefined)
           )
-          .order("desc")
-          .collect()
-      : await ctx.db
+      : ctx.db
           .query("tools")
-          .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined))
-          .order("desc")
-          .collect();
+          .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined));
+    const tools = await listed.order("desc").collect();
     return await Promise.all(tools.map(viewBuilder(ctx, viewer)));
   },
   returns: v.array(toolView),
@@ -150,11 +185,12 @@ export const listMine = query({
     const viewer = await requireViewer(ctx);
     const tools = await ctx.db
       .query("tools")
-      .withIndex("by_owner", (q) => q.eq("ownerId", viewer.user._id))
+      .withIndex("by_owner_and_removed_at", (q) =>
+        q.eq("ownerId", viewer.user._id).eq("removedAt", undefined)
+      )
       .order("desc")
       .collect();
-    const active = tools.filter((tool) => tool.removedAt === undefined);
-    return await Promise.all(active.map(viewBuilder(ctx, viewer)));
+    return await Promise.all(tools.map(viewBuilder(ctx, viewer)));
   },
   returns: v.array(toolView),
 });
@@ -189,6 +225,19 @@ export const update = mutation({
   returns: v.null(),
 });
 
+function openLoans(
+  ctx: QueryCtx,
+  toolId: Id<"tools">,
+  status: "requested" | "approved"
+) {
+  return ctx.db
+    .query("loans")
+    .withIndex("by_tool_and_status_and_start_date", (q) =>
+      q.eq("toolId", toolId).eq("status", status)
+    )
+    .collect();
+}
+
 /**
  * Soft delete so loan history survives. Open requests are declined and
  * upcoming approved loans cancelled. A tool that is currently out can only be
@@ -203,30 +252,22 @@ export const remove = mutation({
 
     const today = todayUtc();
     const now = Date.now();
-    const loans = await ctx.db
-      .query("loans")
-      .withIndex("by_tool_and_status", (q) => q.eq("toolId", toolId))
-      .collect();
-    const isOut = loans.some(
-      (loan) => loan.status === "approved" && loan.startDate <= today
-    );
-    if (isOut && viewer.role !== "admin") {
+    const [requested, approved] = await Promise.all([
+      openLoans(ctx, toolId, "requested"),
+      openLoans(ctx, toolId, "approved"),
+    ]);
+    if (
+      viewer.role !== "admin" &&
+      approved.some((loan) => isOnLoan(loan, today))
+    ) {
       fail("CONFLICT", "This tool is out on loan. Mark it returned first.");
     }
-    await Promise.all(
-      loans.map((loan) => {
-        if (loan.status === "requested") {
-          return ctx.db.patch(loan._id, { decidedAt: now, status: "declined" });
-        }
-        if (loan.status === "approved" && loan.startDate > today) {
-          return ctx.db.patch(loan._id, {
-            decidedAt: now,
-            status: "cancelled",
-          });
-        }
-        return null;
-      })
-    );
+    await Promise.all([
+      ...requested.map((loan) => transitionLoan(ctx, loan, "declined", now)),
+      ...approved
+        .filter((loan) => !isOnLoan(loan, today))
+        .map((loan) => transitionLoan(ctx, loan, "cancelled", now)),
+    ]);
     await ctx.db.patch(toolId, { removedAt: now, removedBy: viewer.user._id });
     return null;
   },
