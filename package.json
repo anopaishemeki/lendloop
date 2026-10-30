@@ -15,7 +15,7 @@
     "lint": "ultracite check",
     "lint:fix": "ultracite fix",
     "format": "ultracite fix",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p convex/tsconfig.json && tsc --noEmit -p convex/tsconfig.test.json",
+    "typecheck": "next typegen && tsc --noEmit -p tsconfig.json && tsc --noEmit -p convex/tsconfig.json && tsc --noEmit -p convex/tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:convex": "vitest run --project convex",
