@@ -1,22 +1,16 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getViewer, requireViewerForWrite } from "./auth";
+import { getViewer, upsertProfile } from "./auth";
+import schema from "./schema";
 
-const meValidator = v.object({
-  _id: v.id("users"),
-  email: v.string(),
-  isAdmin: v.boolean(),
-  isTrustedLender: v.boolean(),
-  name: v.string(),
-});
+const meValidator = schema.tables.users.validator
+  .pick("email", "isTrustedLender", "name")
+  .extend({ _id: v.id("users"), isAdmin: v.boolean() });
 
-/** Called by the client right after sign-in so queries can find the profile. */
+/** Called by the client after sign-in; the signed-in app renders once it resolves. */
 export const syncCurrentUser = mutation({
   args: {},
-  handler: async (ctx) => {
-    const viewer = await requireViewerForWrite(ctx);
-    return viewer.user._id;
-  },
+  handler: (ctx) => upsertProfile(ctx),
   returns: v.id("users"),
 });
 

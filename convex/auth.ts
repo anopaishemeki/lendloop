@@ -2,8 +2,7 @@ import type { UserIdentity } from "convex/server";
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-
-export type Role = "admin" | "user";
+import { type Role, roleFromMetadata } from "./lib/roles";
 
 export type ErrorCode =
   | "UNAUTHENTICATED"
@@ -24,20 +23,6 @@ export function fail(code: ErrorCode, message: string): never {
   throw new ConvexError({ code, message });
 }
 
-// Clerk's session token is customized with `"metadata": "{{user.public_metadata}}"`,
-// the same claim src/proxy.ts reads, so both layers agree on one source. Anything
-// other than the exact string "admin" is a regular user.
-export function roleFromIdentity(identity: UserIdentity): Role {
-  const metadata = identity.metadata as { role?: unknown } | undefined;
-  return metadata?.role === "admin" ? "admin" : "user";
-}
-
-async function requireIdentity(ctx: QueryCtx): Promise<UserIdentity> {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) fail("UNAUTHENTICATED", "Sign in to continue.");
-  return identity;
-}
-
 function findUser(ctx: QueryCtx, clerkId: string) {
   return ctx.db
     .query("users")
@@ -47,7 +32,7 @@ function findUser(ctx: QueryCtx, clerkId: string) {
 
 // Only claims actually present are returned, so a token that omits one never
 // overwrites a stored value with a blank.
-export function profileFromIdentity(identity: UserIdentity) {
+function profileFromIdentity(identity: UserIdentity) {
   const profile: { email?: string; name?: string } = {};
   if (identity.email) profile.email = identity.email;
   const name =
@@ -57,48 +42,42 @@ export function profileFromIdentity(identity: UserIdentity) {
   return profile;
 }
 
-/**
- * Query-side guard. Queries cannot write, so a signed-in caller whose profile
- * row has not been created yet gets `user: null`; callers decide how to treat it.
- */
+/** `null` when signed out; `user` is null until the profile row exists. */
 export async function getViewer(ctx: QueryCtx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
   const user = await findUser(ctx, identity.subject);
-  return { identity, role: roleFromIdentity(identity), user };
+  return { identity, role: roleFromMetadata(identity.metadata), user };
 }
 
+/** Guard for every query and mutation. Never writes. */
 export async function requireViewer(ctx: QueryCtx): Promise<Viewer> {
-  const identity = await requireIdentity(ctx);
-  const user = await findUser(ctx, identity.subject);
+  const viewer = await getViewer(ctx);
+  if (!viewer) fail("UNAUTHENTICATED", "Sign in to continue.");
+  const { user } = viewer;
   if (!user) fail("PROFILE_PENDING", "Your profile is still being set up.");
-  return { identity, role: roleFromIdentity(identity), user };
+  return { ...viewer, user };
 }
 
-/** Mutation-side guard: creates or refreshes the caller's profile row. */
-export async function requireViewerForWrite(ctx: MutationCtx): Promise<Viewer> {
-  const identity = await requireIdentity(ctx);
-  const role = roleFromIdentity(identity);
+/** Creates or refreshes the caller's profile row from the Clerk identity. */
+export async function upsertProfile(ctx: MutationCtx): Promise<Id<"users">> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) fail("UNAUTHENTICATED", "Sign in to continue.");
   const profile = profileFromIdentity(identity);
   const existing = await findUser(ctx, identity.subject);
-  if (existing) {
-    const changed = (Object.keys(profile) as (keyof typeof profile)[]).some(
-      (key) => profile[key] !== existing[key]
-    );
-    if (!changed) return { identity, role, user: existing };
-    await ctx.db.patch(existing._id, profile);
-    return { identity, role, user: { ...existing, ...profile } };
+  if (!existing) {
+    return await ctx.db.insert("users", {
+      clerkId: identity.subject,
+      email: profile.email ?? "",
+      isTrustedLender: false,
+      name: profile.name ?? profile.email?.split("@")[0] ?? "Neighbor",
+    });
   }
-  const fields = {
-    clerkId: identity.subject,
-    createdAt: Date.now(),
-    email: profile.email ?? "",
-    isTrustedLender: false,
-    name: profile.name ?? profile.email?.split("@")[0] ?? "Neighbor",
-  };
-  const _id = await ctx.db.insert("users", fields);
-  const user = (await ctx.db.get(_id))!;
-  return { identity, role, user };
+  const changed = (Object.keys(profile) as (keyof typeof profile)[]).some(
+    (key) => profile[key] !== existing[key]
+  );
+  if (changed) await ctx.db.patch(existing._id, profile);
+  return existing._id;
 }
 
 export function assertAdmin(viewer: Viewer) {
