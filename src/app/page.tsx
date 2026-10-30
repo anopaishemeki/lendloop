@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { CategoryIcon } from "@/components/category-icon";
+import { Eyebrow } from "@/components/eyebrow";
 import { Logo } from "@/components/logo";
 import { PublicToolList } from "@/components/public-tool-list";
 import { SiteFooter } from "@/components/site-footer";
@@ -74,7 +75,7 @@ function HeroShelf() {
           </div>
         ))}
         <div className="bg-primary text-primary-foreground col-span-2 mt-1 flex items-center justify-between rounded-xl px-4 py-3">
-          <span className="font-serif text-lg">Shared, not stored.</span>
+          <span className="font-display text-lg">Shared, not stored.</span>
           <ShieldCheck className="size-5" />
         </div>
       </div>
@@ -102,7 +103,7 @@ export default function HomePage() {
                 <span className="bg-terracotta size-2 rounded-full" />
                 Your neighborhood tool library
               </p>
-              <h1 className="text-5xl leading-[1.05] font-semibold sm:text-6xl">
+              <h1 className="font-display text-5xl leading-[1.05] font-semibold sm:text-6xl">
                 Borrow what you need.{" "}
                 <em className="text-primary not-italic">
                   Lend what you don&apos;t.
@@ -129,7 +130,9 @@ export default function HomePage() {
 
         <section className="bg-card/50 border-y">
           <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-            <h2 className="text-3xl font-semibold">How it works</h2>
+            <h2 className="font-display text-3xl font-semibold">
+              How it works
+            </h2>
             <ol className="mt-8 grid gap-6 md:grid-cols-3">
               {STEPS.map(({ body, icon: Icon, title }, i) => (
                 <li className="bg-card rounded-2xl border p-6" key={title}>
@@ -137,11 +140,13 @@ export default function HomePage() {
                     <span className="bg-secondary text-secondary-foreground inline-flex size-11 items-center justify-center rounded-xl">
                       <Icon aria-hidden className="size-5" />
                     </span>
-                    <span className="text-muted-foreground/40 font-serif text-4xl">
+                    <span className="text-muted-foreground/40 font-display text-4xl">
                       {i + 1}
                     </span>
                   </div>
-                  <h3 className="mt-5 text-xl font-semibold">{title}</h3>
+                  <h3 className="font-display mt-5 text-xl font-semibold">
+                    {title}
+                  </h3>
                   <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
                     {body}
                   </p>
@@ -157,10 +162,10 @@ export default function HomePage() {
         >
           <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
             <div className="space-y-1.5">
-              <p className="text-terracotta text-xs font-medium tracking-[0.18em] uppercase">
-                On the shelf today
-              </p>
-              <h2 className="text-3xl font-semibold">Available right now</h2>
+              <Eyebrow>On the shelf today</Eyebrow>
+              <h2 className="font-display text-3xl font-semibold">
+                Available right now
+              </h2>
             </div>
             <p className="text-muted-foreground max-w-sm text-sm">
               Sign in to see who&apos;s lending, check dates and send a request.

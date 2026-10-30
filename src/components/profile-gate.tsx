@@ -30,7 +30,7 @@ export function ProfileGate({ children }: { children: ReactNode }) {
   if (failed) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-3 px-6 py-24 text-center">
-        <p className="font-serif text-xl">Something went sideways</p>
+        <p className="font-display text-xl">Something went sideways</p>
         <p className="text-muted-foreground">
           We couldn&apos;t load your profile. Check your connection and try
           again.

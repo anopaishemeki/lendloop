@@ -15,7 +15,7 @@ export function EmptyState({
       <span className="bg-secondary text-secondary-foreground inline-flex size-12 items-center justify-center rounded-full">
         <Icon aria-hidden className="size-6" />
       </span>
-      <p className="font-serif text-lg font-medium">{title}</p>
+      <p className="font-display text-lg font-medium">{title}</p>
       {children}
     </div>
   );
