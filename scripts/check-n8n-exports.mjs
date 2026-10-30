@@ -36,6 +36,9 @@ for (const file of files) {
     if (pattern.test(text))
       problems.push(`${file}: looks like it contains a ${label}`);
   }
+  if (Object.keys(workflow.pinData ?? {}).length > 0) {
+    problems.push(`${file}: pinned execution data may contain personal data`);
+  }
   for (const key of ["id", "versionId", "meta"]) {
     if (key in workflow)
       problems.push(`${file}: instance-specific "${key}" present`);
