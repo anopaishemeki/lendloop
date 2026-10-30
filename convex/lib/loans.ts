@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { fail } from "../auth";
+import type { DateRange } from "./dates";
 import type { LoanStatus } from "./validators";
 
 const TRANSITIONS: Record<LoanStatus, readonly LoanStatus[]> = {
@@ -29,6 +30,19 @@ export function isOverdue(
   today: string
 ): boolean {
   return loan.status === "approved" && loan.endDate < today;
+}
+
+/**
+ * The days an approved loan actually blocks. An overdue loan keeps the tool
+ * until it is returned, so its range runs at least through today.
+ */
+export function blockedRange(
+  loan: Pick<Doc<"loans">, "startDate" | "endDate">,
+  today: string
+): DateRange {
+  const endDate =
+    loan.startDate <= today && loan.endDate < today ? today : loan.endDate;
+  return { endDate, startDate: loan.startDate };
 }
 
 export function canTransition(from: LoanStatus, to: LoanStatus): boolean {
