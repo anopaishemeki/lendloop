@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Summarize the failure without copying any payload data into the alert.\nconst { execution = {}, workflow = {} } = $input.first().json;\nconst error = execution.error || {};\nconst lines = [\n  `Workflow: ${workflow.name || 'unknown'}`,\n  `Failed node: ${execution.lastNodeExecuted || error.node?.name || 'unknown'}`,\n  `Error: ${error.message || 'unknown error'}`,\n  `Execution: ${execution.url || execution.id || 'n/a'}`,\n  `Mode: ${execution.mode || 'n/a'}`,\n];\nreturn [{\n  json: {\n    subject: `[LendLoop] ${workflow.name || 'Workflow'} failed`,\n    text: lines.join('\\n'),\n  },\n}];\n"
+        "jsCode": "// Settings come from n8n Variables; self-hosted community installs without\n// Variables fall back to environment variables of the same name.\nfunction setting(name) {\n  try { return $vars?.[name] || $env[name]; } catch (error) { return undefined; }\n}\nfunction required(name) {\n  const value = setting(name);\n  if (!value) throw new Error(`${name} is not set (n8n Variable or environment variable)`);\n  return value;\n}\n\n// Summarize the failure without copying any payload data into the alert.\nconst { execution = {}, workflow = {} } = $input.first().json;\nconst error = execution.error || {};\nconst lines = [\n  `Workflow: ${workflow.name || 'unknown'}`,\n  `Failed node: ${execution.lastNodeExecuted || error.node?.name || 'unknown'}`,\n  `Error: ${error.message || 'unknown error'}`,\n  `Execution: ${execution.url || execution.id || 'n/a'}`,\n  `Mode: ${execution.mode || 'n/a'}`,\n];\nreturn [{\n  json: {\n    from: required('RESEND_FROM'),\n    to: required('OPS_ALERT_EMAIL'),\n    subject: `[LendLoop] ${workflow.name || 'Workflow'} failed`,\n    text: lines.join('\\n'),\n  },\n}];\n"
       },
       "id": "c41e9d27-5a8b-4f0c-8e2d-7b3a1f6c9d02",
       "name": "Format alert",
@@ -33,7 +33,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ from: ($vars.RESEND_FROM || $env.RESEND_FROM), to: [($vars.OPS_ALERT_EMAIL || $env.OPS_ALERT_EMAIL)], subject: $json.subject, text: $json.text }) }}",
+        "jsonBody": "={{ JSON.stringify({ from: $json.from, to: [$json.to], subject: $json.subject, text: $json.text }) }}",
         "options": {
           "timeout": 10000
         }
