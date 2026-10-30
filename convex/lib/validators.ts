@@ -28,29 +28,22 @@ export const NOTIFICATION_EVENTS = [
   "loan.returned",
 ] as const;
 
+export const DELIVERY_STATUSES = ["pending", "sent", "failed"] as const;
+export const REMINDER_STATUSES = ["sent", "failed"] as const;
+
 export type ToolCategory = (typeof TOOL_CATEGORIES)[number];
 export type ToolCondition = (typeof TOOL_CONDITIONS)[number];
 export type LoanStatus = (typeof LOAN_STATUSES)[number];
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
 
-export const categoryValidator = v.union(
-  ...TOOL_CATEGORIES.map((c) => v.literal(c))
-);
-export const conditionValidator = v.union(
-  ...TOOL_CONDITIONS.map((c) => v.literal(c))
-);
-export const loanStatusValidator = v.union(
-  ...LOAN_STATUSES.map((s) => v.literal(s))
-);
-export const notificationEventValidator = v.union(
-  ...NOTIFICATION_EVENTS.map((e) => v.literal(e))
-);
-export const deliveryStatusValidator = v.union(
-  v.literal("pending"),
-  v.literal("sent"),
-  v.literal("failed")
-);
-export const reminderStatusValidator = v.union(
-  v.literal("sent"),
-  v.literal("failed")
-);
+function literals<T extends string>(values: readonly [T, T, ...T[]]) {
+  const [first, second, ...rest] = values.map((value) => v.literal(value));
+  return v.union(first!, second!, ...rest);
+}
+
+export const categoryValidator = literals(TOOL_CATEGORIES);
+export const conditionValidator = literals(TOOL_CONDITIONS);
+export const loanStatusValidator = literals(LOAN_STATUSES);
+export const notificationEventValidator = literals(NOTIFICATION_EVENTS);
+export const deliveryStatusValidator = literals(DELIVERY_STATUSES);
+export const reminderStatusValidator = literals(REMINDER_STATUSES);

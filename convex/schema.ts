@@ -13,7 +13,6 @@ export default defineSchema({
   // A borrow request and its lifecycle. Dates are UTC calendar days (YYYY-MM-DD).
   loans: defineTable({
     borrowerId: v.id("users"),
-    createdAt: v.number(),
     decidedAt: v.optional(v.number()),
     endDate: v.string(),
     note: v.optional(v.string()),
@@ -31,7 +30,6 @@ export default defineSchema({
   // Outbound n8n events: one row per event, updated by the delivery worker.
   notificationOutbox: defineTable({
     attempts: v.number(),
-    createdAt: v.number(),
     event: notificationEventValidator,
     lastError: v.optional(v.string()),
     loanId: v.id("loans"),
@@ -41,7 +39,6 @@ export default defineSchema({
 
   // Overdue reminders written back by n8n; idempotencyKey is unique per loan per day.
   reminders: defineTable({
-    createdAt: v.number(),
     error: v.optional(v.string()),
     idempotencyKey: v.string(),
     loanId: v.id("loans"),
@@ -54,7 +51,6 @@ export default defineSchema({
   tools: defineTable({
     category: categoryValidator,
     condition: conditionValidator,
-    createdAt: v.number(),
     description: v.string(),
     name: v.string(),
     ownerId: v.id("users"),
@@ -70,7 +66,6 @@ export default defineSchema({
   // JWT on every call so revoking it in Clerk takes effect immediately.
   users: defineTable({
     clerkId: v.string(),
-    createdAt: v.number(),
     email: v.string(),
     isTrustedLender: v.boolean(),
     name: v.string(),
