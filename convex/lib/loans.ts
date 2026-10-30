@@ -1,9 +1,9 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { fail } from "../auth";
-import { enqueueNotification } from "../notifications";
 import { isOnLoan } from "./availability";
 import type { DateRange } from "./dates";
+import { enqueueNotification } from "./notifications";
 import type { LoanStatus, NotificationEvent } from "./validators";
 
 const TRANSITIONS: Record<LoanStatus, readonly LoanStatus[]> = {

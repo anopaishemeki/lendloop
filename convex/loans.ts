@@ -30,6 +30,7 @@ import {
   loansForTool,
   transitionLoan,
 } from "./lib/loans";
+import { enqueueNotification } from "./lib/notifications";
 import { cleanText } from "./lib/text";
 import { publicProfile } from "./lib/users";
 import {
@@ -39,7 +40,6 @@ import {
   type LoanStatus,
   loanStatusValidator,
 } from "./lib/validators";
-import { enqueueNotification } from "./notifications";
 
 const HISTORY_LIMIT = 50;
 const CLOSED_STATUSES = ["returned", "declined", "cancelled"] as const;
