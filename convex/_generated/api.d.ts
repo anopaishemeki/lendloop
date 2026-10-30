@@ -9,8 +9,13 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as lib_availability from "../lib/availability.js";
+import type * as lib_dates from "../lib/dates.js";
+import type * as lib_loans from "../lib/loans.js";
 import type * as lib_roles from "../lib/roles.js";
+import type * as lib_text from "../lib/text.js";
 import type * as lib_validators from "../lib/validators.js";
+import type * as tools from "../tools.js";
 import type * as users from "../users.js";
 
 import type {
@@ -21,8 +26,13 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  "lib/availability": typeof lib_availability;
+  "lib/dates": typeof lib_dates;
+  "lib/loans": typeof lib_loans;
   "lib/roles": typeof lib_roles;
+  "lib/text": typeof lib_text;
   "lib/validators": typeof lib_validators;
+  tools: typeof tools;
   users: typeof users;
 }>;
 

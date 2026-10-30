@@ -42,6 +42,9 @@
         "noConsole": "off",
         "noUnknownAtRules": "off",
         "useAwait": "off"
+      },
+      "performance": {
+        "noJsxPropsBind": "off"
       }
     }
   },

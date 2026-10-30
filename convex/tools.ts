@@ -1,0 +1,275 @@
+import { v } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
+import { mutation, type QueryCtx, query } from "./_generated/server";
+import {
+  assertToolOwner,
+  assertToolOwnerOrAdmin,
+  fail,
+  isSelf,
+  requireViewer,
+  type Viewer,
+} from "./auth";
+import {
+  availabilityOf,
+  availabilityValidator,
+  isOnLoan,
+} from "./lib/availability";
+import { todayUtc } from "./lib/dates";
+import { transitionLoan } from "./lib/loans";
+import { cleanText } from "./lib/text";
+import {
+  categoryValidator,
+  conditionValidator,
+  TOOL_DESCRIPTION_MAX,
+  TOOL_NAME_MAX,
+  TOOL_NAME_MIN,
+} from "./lib/validators";
+
+const PUBLIC_LIMIT = 100;
+const PUBLIC_BATCH = 25;
+
+const toolFields = {
+  category: categoryValidator,
+  condition: conditionValidator,
+  description: v.string(),
+  name: v.string(),
+};
+
+const toolView = v.object({
+  _id: v.id("tools"),
+  availability: availabilityValidator,
+  category: categoryValidator,
+  condition: conditionValidator,
+  description: v.string(),
+  isMine: v.boolean(),
+  name: v.string(),
+  owner: v.object({ firstName: v.string(), isTrustedLender: v.boolean() }),
+});
+
+const publicToolView = v.object({
+  category: categoryValidator,
+  name: v.string(),
+});
+
+function firstName(name: string) {
+  return name.split(" ")[0] || name;
+}
+
+function cleanFields(args: { name: string; description: string }) {
+  return {
+    description: cleanText(
+      args.description,
+      "Description",
+      0,
+      TOOL_DESCRIPTION_MAX
+    ),
+    name: cleanText(args.name, "Name", TOOL_NAME_MIN, TOOL_NAME_MAX),
+  };
+}
+
+/** Builds card views, loading each owner once per query instead of once per tool. */
+function viewBuilder(ctx: QueryCtx, viewer: Viewer) {
+  const today = todayUtc();
+  const owners = new Map<Id<"users">, Promise<Doc<"users"> | null>>([
+    [viewer.user._id, Promise.resolve(viewer.user)],
+  ]);
+  const ownerOf = (id: Id<"users">) => {
+    let owner = owners.get(id);
+    if (!owner) {
+      owner = ctx.db.get(id);
+      owners.set(id, owner);
+    }
+    return owner;
+  };
+
+  return async (tool: Doc<"tools">) => {
+    const [owner, availability] = await Promise.all([
+      ownerOf(tool.ownerId),
+      availabilityOf(ctx, tool._id, today),
+    ]);
+    return {
+      _id: tool._id,
+      availability,
+      category: tool.category,
+      condition: tool.condition,
+      description: tool.description,
+      isMine: isSelf(viewer, tool.ownerId),
+      name: tool.name,
+      owner: {
+        firstName: owner ? firstName(owner.name) : "Neighbor",
+        isTrustedLender: owner?.isTrustedLender ?? false,
+      },
+    };
+  };
+}
+
+async function getActiveTool(ctx: QueryCtx, toolId: Id<"tools">) {
+  const tool = await ctx.db.get(toolId);
+  if (!tool || tool.removedAt !== undefined) {
+    fail("NOT_FOUND", "That tool is no longer listed.");
+  }
+  return tool;
+}
+
+/**
+ * Public, unauthenticated list for the landing page. The returns validator
+ * pins the shape to name and category so nothing else can leak.
+ */
+export const listPublic = query({
+  args: {},
+  handler: async (ctx) => {
+    const today = todayUtc();
+    const visible: (typeof publicToolView.type)[] = [];
+    let batch: Doc<"tools">[] = [];
+
+    const flush = async () => {
+      const availability = await Promise.all(
+        batch.map((tool) => availabilityOf(ctx, tool._id, today))
+      );
+      batch.forEach((tool, i) => {
+        if (availability[i] === "available" && visible.length < PUBLIC_LIMIT) {
+          visible.push({ category: tool.category, name: tool.name });
+        }
+      });
+      batch = [];
+    };
+
+    const listed = ctx.db
+      .query("tools")
+      .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined))
+      .order("desc");
+    for await (const tool of listed) {
+      batch.push(tool);
+      if (batch.length === PUBLIC_BATCH) {
+        await flush();
+        if (visible.length >= PUBLIC_LIMIT) break;
+      }
+    }
+    await flush();
+    return visible;
+  },
+  returns: v.array(publicToolView),
+});
+
+export const list = query({
+  args: { category: v.optional(categoryValidator) },
+  handler: async (ctx, { category }) => {
+    const viewer = await requireViewer(ctx);
+    const listed = category
+      ? ctx.db
+          .query("tools")
+          .withIndex("by_category_and_removed_at", (q) =>
+            q.eq("category", category).eq("removedAt", undefined)
+          )
+      : ctx.db
+          .query("tools")
+          .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined));
+    const tools = await listed.order("desc").collect();
+    return await Promise.all(tools.map(viewBuilder(ctx, viewer)));
+  },
+  returns: v.array(toolView),
+});
+
+export const get = query({
+  args: { toolId: v.id("tools") },
+  handler: async (ctx, { toolId }) => {
+    const viewer = await requireViewer(ctx);
+    return await viewBuilder(ctx, viewer)(await getActiveTool(ctx, toolId));
+  },
+  returns: toolView,
+});
+
+export const listMine = query({
+  args: {},
+  handler: async (ctx) => {
+    const viewer = await requireViewer(ctx);
+    const tools = await ctx.db
+      .query("tools")
+      .withIndex("by_owner_and_removed_at", (q) =>
+        q.eq("ownerId", viewer.user._id).eq("removedAt", undefined)
+      )
+      .order("desc")
+      .collect();
+    return await Promise.all(tools.map(viewBuilder(ctx, viewer)));
+  },
+  returns: v.array(toolView),
+});
+
+export const create = mutation({
+  args: toolFields,
+  handler: async (ctx, args) => {
+    const viewer = await requireViewer(ctx);
+    return await ctx.db.insert("tools", {
+      ...args,
+      ...cleanFields(args),
+      ownerId: viewer.user._id,
+      updatedAt: Date.now(),
+    });
+  },
+  returns: v.id("tools"),
+});
+
+export const update = mutation({
+  args: { toolId: v.id("tools"), ...toolFields },
+  handler: async (ctx, { toolId, ...args }) => {
+    const viewer = await requireViewer(ctx);
+    const tool = await getActiveTool(ctx, toolId);
+    assertToolOwner(viewer, tool);
+    await ctx.db.patch(toolId, {
+      ...args,
+      ...cleanFields(args),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+  returns: v.null(),
+});
+
+function openLoans(
+  ctx: QueryCtx,
+  toolId: Id<"tools">,
+  status: "requested" | "approved"
+) {
+  return ctx.db
+    .query("loans")
+    .withIndex("by_tool_and_status_and_start_date", (q) =>
+      q.eq("toolId", toolId).eq("status", status)
+    )
+    .collect();
+}
+
+/**
+ * Soft delete so loan history survives. Open requests are declined and
+ * upcoming approved loans cancelled. A tool that is currently out can only be
+ * removed by an admin; the loan stays approved so it can still be returned.
+ */
+export const remove = mutation({
+  args: { toolId: v.id("tools") },
+  handler: async (ctx, { toolId }) => {
+    const viewer = await requireViewer(ctx);
+    const tool = await getActiveTool(ctx, toolId);
+    assertToolOwnerOrAdmin(viewer, tool);
+
+    const today = todayUtc();
+    const now = Date.now();
+    const [requested, approved] = await Promise.all([
+      openLoans(ctx, toolId, "requested"),
+      openLoans(ctx, toolId, "approved"),
+    ]);
+    if (
+      viewer.role !== "admin" &&
+      approved.some((loan) => isOnLoan(loan, today))
+    ) {
+      fail("CONFLICT", "This tool is out on loan. Mark it returned first.");
+    }
+    await Promise.all([
+      ...requested.map((loan) => transitionLoan(ctx, loan, "declined", now)),
+      ...approved
+        .filter((loan) => !isOnLoan(loan, today))
+        .map((loan) => transitionLoan(ctx, loan, "cancelled", now)),
+    ]);
+    await ctx.db.patch(toolId, { removedAt: now, removedBy: viewer.user._id });
+    return null;
+  },
+  returns: v.null(),
+});

@@ -25,7 +25,11 @@ export default defineSchema({
     .index("by_borrower", ["borrowerId"])
     .index("by_owner", ["ownerId"])
     .index("by_status_and_end_date", ["status", "endDate"])
-    .index("by_tool_and_status", ["toolId", "status"]),
+    .index("by_tool_and_status_and_start_date", [
+      "toolId",
+      "status",
+      "startDate",
+    ]),
 
   // Outbound n8n events: one row per event, updated by the delivery worker.
   notificationOutbox: defineTable({
@@ -58,7 +62,7 @@ export default defineSchema({
     removedBy: v.optional(v.id("users")),
     updatedAt: v.number(),
   })
-    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_removed_at", ["ownerId", "removedAt"])
     .index("by_category_and_removed_at", ["category", "removedAt"])
     .index("by_removed_at", ["removedAt"]),
 

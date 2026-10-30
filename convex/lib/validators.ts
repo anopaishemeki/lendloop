@@ -12,6 +12,10 @@ export const TOOL_CATEGORIES = [
 
 export const TOOL_CONDITIONS = ["new", "good", "fair", "worn"] as const;
 
+export const TOOL_NAME_MIN = 2;
+export const TOOL_NAME_MAX = 80;
+export const TOOL_DESCRIPTION_MAX = 500;
+
 export const LOAN_STATUSES = [
   "requested",
   "approved",
