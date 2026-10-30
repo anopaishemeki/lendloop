@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { addDays, todayUtc } from "./lib/dates";
 import { verifyRequest } from "./lib/hmac";
@@ -154,6 +154,7 @@ describe("delivery", () => {
   test("retries server errors, then records the failure", async () => {
     vi.stubEnv("N8N_REQUEST_WEBHOOK_URL", WEBHOOK);
     vi.stubEnv("N8N_OUTBOUND_SECRET", SECRET);
+    vi.stubEnv("APP_URL", "https://lendloop.example");
     const fetchMock = vi.fn(async () => new Response("down", { status: 503 }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -161,15 +162,16 @@ describe("delivery", () => {
     await request(s);
     await drain(s.t);
 
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
     const [row] = await outbox(s.t);
-    expect(row).toMatchObject({ attempts: 5, status: "failed" });
+    expect(row).toMatchObject({ attempts: 6, status: "failed" });
     expect(row?.lastError).toContain("503");
   });
 
   test("does not retry a rejected signature", async () => {
     vi.stubEnv("N8N_REQUEST_WEBHOOK_URL", WEBHOOK);
     vi.stubEnv("N8N_OUTBOUND_SECRET", SECRET);
+    vi.stubEnv("APP_URL", "https://lendloop.example");
     const fetchMock = vi.fn(async () => new Response("no", { status: 401 }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -208,5 +210,49 @@ describe("delivery", () => {
     expect((await s.t.run((ctx) => ctx.db.get(loanId)))?.status).toBe(
       "requested"
     );
+  });
+
+  test("payload carries no loan status", async () => {
+    vi.stubEnv("N8N_REQUEST_WEBHOOK_URL", WEBHOOK);
+    vi.stubEnv("N8N_OUTBOUND_SECRET", SECRET);
+    vi.stubEnv("APP_URL", "https://lendloop.example");
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) =>
+      Response.json({ received: true })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const s = await setup();
+    await request(s);
+    await drain(s.t);
+    const payload = JSON.parse(fetchMock.mock.calls[0]?.[1].body as string);
+    expect(payload.loan).toEqual({ endDate: day(2), startDate: day(1) });
+  });
+});
+
+describe("redriveFailed", () => {
+  test("re-queues failed events once the outage is fixed", async () => {
+    vi.stubEnv("N8N_REQUEST_WEBHOOK_URL", WEBHOOK);
+    vi.stubEnv("N8N_OUTBOUND_SECRET", SECRET);
+    vi.stubEnv("APP_URL", "https://lendloop.example");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("", { status: 401 }))
+    );
+    const s = await setup();
+    await request(s);
+    await drain(s.t);
+    expect((await outbox(s.t))[0]?.status).toBe("failed");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ received: true }))
+    );
+    expect(await s.t.mutation(internal.notifications.redriveFailed, {})).toBe(
+      1
+    );
+    await drain(s.t);
+    expect((await outbox(s.t))[0]).toMatchObject({
+      attempts: 2,
+      status: "sent",
+    });
   });
 });
