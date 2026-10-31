@@ -1,8 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { addDays, todayUtc } from "./lib/dates";
-import { canTransition } from "./lib/loans";
+import { canTransition, isClosedStatus } from "./lib/loans";
+import type { BoardSection, LoanRole, LoanStatus } from "./lib/validators";
 import { identityFor, newTest } from "./test.setup";
 
 const today = todayUtc();
@@ -42,18 +43,38 @@ function requestFor(
   });
 }
 
+/** A board page, read by the person in `role` unless `as` says otherwise. */
+function board(
+  s: Setup,
+  role: LoanRole,
+  section: BoardSection,
+  {
+    as = s[role],
+    cursor = null,
+    numItems = 10,
+  }: { as?: Setup["owner"]; cursor?: string | null; numItems?: number } = {}
+) {
+  return as.caller.query(api.loans.listBoard, {
+    paginationOpts: { cursor, numItems },
+    role,
+    section,
+  });
+}
+
 /** Seeds a loan directly, for states the API can't reach on the current date. */
 function seedLoan(
   { t, owner, borrower, toolId }: Setup,
   fields: {
     startDate: string;
     endDate: string;
-    status: "approved" | "requested";
+    status: LoanStatus;
   }
 ) {
   return t.run((ctx) =>
     ctx.db.insert("loans", {
       borrowerId: borrower.userId,
+      // transitionLoan stamps closedAt; seeded closed loans need it too.
+      ...(isClosedStatus(fields.status) ? { closedAt: Date.now() } : {}),
       ownerId: owner.userId,
       toolId,
       ...fields,
@@ -323,10 +344,8 @@ describe("views", () => {
       startDate: day(-3),
       status: "approved",
     });
-    const [mine] = (await s.borrower.caller.query(api.loans.listMyRequests, {}))
-      .active;
-    const [incoming] = (await s.owner.caller.query(api.loans.listIncoming, {}))
-      .active;
+    const [mine] = (await board(s, "borrower", "active")).page;
+    const [incoming] = (await board(s, "owner", "active")).page;
     expect(mine).toMatchObject({
       canMarkReturned: false,
       counterpart: { firstName: "olive" },
@@ -338,11 +357,65 @@ describe("views", () => {
       counterpart: { firstName: "ben" },
       role: "owner",
     });
-    expect(await s.other.caller.query(api.loans.listIncoming, {})).toEqual({
-      active: [],
-      history: [],
-      pending: [],
+    for (const section of ["pending", "active", "history"] as const) {
+      expect((await board(s, "owner", section, { as: s.other })).page).toEqual(
+        []
+      );
+    }
+  });
+
+  test("open sections lead with the most urgent loan", async () => {
+    const s = await setup();
+    const later = await seedLoan(s, {
+      endDate: day(9),
+      startDate: day(8),
+      status: "requested",
     });
+    const sooner = await seedLoan(s, {
+      endDate: day(3),
+      startDate: day(2),
+      status: "requested",
+    });
+    const dueLater = await seedLoan(s, {
+      endDate: day(5),
+      startDate: day(4),
+      status: "approved",
+    });
+    const overdue = await seedLoan(s, {
+      endDate: day(-1),
+      startDate: day(-3),
+      status: "approved",
+    });
+
+    const pending = await board(s, "owner", "pending");
+    expect(pending.page.map((loan) => loan._id)).toEqual([sooner, later]);
+    const active = await board(s, "borrower", "active");
+    expect(active.page.map((loan) => loan._id)).toEqual([overdue, dueLater]);
+  });
+
+  test("history pages through closed loans only, newest first", async () => {
+    const s = await setup();
+    const closed: Id<"loans">[] = [];
+    for (const status of ["returned", "declined", "cancelled"] as const) {
+      closed.push(
+        await seedLoan(s, { endDate: day(-1), startDate: day(-2), status })
+      );
+    }
+    await seedLoan(s, {
+      endDate: day(3),
+      startDate: day(2),
+      status: "approved",
+    });
+
+    const first = await board(s, "borrower", "history", { numItems: 2 });
+    expect(first.page.map((loan) => loan._id)).toEqual([closed[2], closed[1]]);
+    expect(first.isDone).toBe(false);
+    const rest = await board(s, "borrower", "history", {
+      cursor: first.continueCursor,
+      numItems: 2,
+    });
+    expect(rest.page.map((loan) => loan._id)).toEqual([closed[0]]);
+    expect((await board(s, "owner", "active")).page).toHaveLength(1);
   });
 
   test("booked ranges expose dates only", async () => {
@@ -364,6 +437,34 @@ describe("views", () => {
     expect(
       await s.other.caller.query(api.loans.bookedRanges, { toolId: s.toolId })
     ).toEqual([]);
+  });
+});
+
+describe("closedAt backfill", () => {
+  test("puts loans closed before closedAt existed into history", async () => {
+    const s = await setup();
+    const old = await s.t.run((ctx) =>
+      ctx.db.insert("loans", {
+        borrowerId: s.borrower.userId,
+        decidedAt: 1,
+        endDate: day(-1),
+        ownerId: s.owner.userId,
+        startDate: day(-2),
+        status: "declined",
+        toolId: s.toolId,
+      })
+    );
+    expect((await board(s, "borrower", "history")).page).toEqual([]);
+
+    const result = await s.t.mutation(internal.migrations.backfillClosedAt, {});
+    expect(result).toMatchObject({ isDone: true, patched: 1 });
+    expect(
+      (await board(s, "borrower", "history")).page.map((loan) => loan._id)
+    ).toEqual([old]);
+    // Re-running finds nothing left to do.
+    expect(
+      await s.t.mutation(internal.migrations.backfillClosedAt, {})
+    ).toMatchObject({ patched: 0 });
   });
 });
 
