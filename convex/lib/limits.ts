@@ -18,6 +18,8 @@ import { fail, type Viewer } from "../auth";
 export const LIMITS = {
   // Per borrower: each request emails an owner.
   borrowRequest: { capacity: 10, kind: "token bucket", period: HOUR, rate: 20 },
+  // Per reporter.
+  listingReport: { capacity: 5, kind: "token bucket", period: DAY, rate: 10 },
   // Per lister.
   newListing: { capacity: 10, kind: "token bucket", period: DAY, rate: 20 },
   // Per owner, across all borrowers, so one inbox can't be flooded.
@@ -29,6 +31,7 @@ export type RateLimitName = keyof typeof LIMITS;
 /** Completes "… recently. Try again in N min." */
 const REFUSALS: Record<RateLimitName, string> = {
   borrowRequest: "You've sent a lot of borrow requests",
+  listingReport: "You've reported a lot of listings",
   newListing: "You've listed a lot of tools",
   ownerRequests: "This lender has had a lot of requests",
 };

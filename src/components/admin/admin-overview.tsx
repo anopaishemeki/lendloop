@@ -5,9 +5,9 @@ import {
   AlarmClock,
   BadgeCheck,
   CircleAlert,
+  Flag,
   Hourglass,
   type LucideIcon,
-  Repeat,
   Users,
   Wrench,
 } from "lucide-react";
@@ -150,16 +150,18 @@ export function AdminOverview() {
           value={stats.listings.toLocaleString()}
         />
         <StatCard
+          hint="Listings neighbors flagged"
+          href="/admin/reports"
+          icon={Flag}
+          label="Open reports"
+          tone={stats.openReports > 0 ? "warn" : "default"}
+          value={stats.openReports.toLocaleString()}
+        />
+        <StatCard
           href="/admin/loans?status=requested"
           icon={Hourglass}
           label="Requests awaiting a decision"
           value={stats.loans.requested.toLocaleString()}
-        />
-        <StatCard
-          href="/admin/loans?status=approved"
-          icon={Repeat}
-          label="Approved loans"
-          value={stats.loans.approved.toLocaleString()}
         />
         <StatCard
           hint="Approved loans past their end date"

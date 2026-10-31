@@ -31,14 +31,16 @@ A neighborhood tool-lending board. Neighbors list tools they're happy to lend, r
 - **All tools** (`/tools`): availability badges, a category filter kept in the URL, the owner's first name and a Trusted Lender badge.
 - **List a tool** and **Edit**: name, category, condition and a short description.
 - **Request to borrow:** pick a date range. The dialog shows dates already booked.
+- **Report a listing:** flag someone else's listing with a reason (unsafe, misleading, inappropriate, spam or other) and optional details. Each person can report a listing once; the lender isn't told who reported it.
 - **My listings**, **My requests** and **Incoming requests:**
   - Owners approve, decline, mark returned or cancel.
   - Borrowers withdraw a request or cancel before the loan starts.
   - Each loan shows its recent automation, e.g. "Overdue reminder sent to you 2 days ago" (bonus feature).
 - **Admin portal** (`/admin`): its own layout with a sidebar, and one page per job:
-  - **Overview:** neighbors, live listings, pending and approved loans, overdue loans and failed notifications, each linking to the page that deals with it; loans by status; automation health; the latest loans.
+  - **Overview:** neighbors, live listings, open reports, pending loans, overdue loans and failed notifications, each linking to the page that deals with it; loans by status; automation health; the latest loans.
   - **Loans:** every loan with a status filter (the overview cards link here pre-filtered).
   - **Listings:** remove any listing.
+  - **Reports:** the report queue (open by default, filterable by status). **Remove** takes the listing down and closes every open report about it (as does removing it from Listings); **Dismiss** closes one report. A lender removing their own listing leaves its reports open, marked "Removed by the lender", so an admin still sees them.
   - **Neighbors:** mark lenders as Trusted Lender.
   - **Automation:** every request-notification delivery with its status, attempts and last error, a **Retry failed** button, and the overdue-reminder log.
 
@@ -267,6 +269,7 @@ There are two roles:
 **Rate limits** (`convex/lib/limits.ts`, `@convex-dev/rate-limiter`)
 - Token buckets (a burst, then a steady refill), checked after validation so people see the real error first:
   - borrow requests per borrower: burst 10, refilling at 20 an hour;
+  - listing reports per reporter: burst 5, refilling at 10 a day;
   - requests received per owner, across all borrowers, so one inbox can't be flooded: burst 30, refilling at 30 an hour;
   - new listings per lister: burst 10, refilling at 20 a day.
 - A refused call fails with `RATE_LIMITED` and says how many minutes to wait. It uses no token, and a call that fails for another reason gives its token back (the mutation rolls back). Admins are exempt.
@@ -359,8 +362,6 @@ The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import
   - Ship Convex logs to a log service.
   - Alert on `notificationOutbox` rows with status `failed`, and on Error-handler executions.
   - Add a small dashboard of delivery and reminder outcomes.
-- **Abuse controls:**
-  - Add a report-listing flow for admins.
 - **Testing:** add Playwright end-to-end tests with `@clerk/testing` against a staging deployment.
 - **Moving off the n8n Cloud trial:**
   - **Paid n8n Cloud** (check current plans and limits on n8n.io):
@@ -387,7 +388,7 @@ src/
 convex/
   auth.ts                 shared authorization helpers (identity, roles, ownership)
   schema.ts               tables and indexes
-  tools.ts loans.ts admin.ts users.ts   public functions
+  tools.ts loans.ts reports.ts admin.ts users.ts   public functions
   notifications.ts        outbox delivery to n8n (workpool action + onComplete)
   reminders.ts http.ts    overdue list, idempotent write-back, signed HTTP endpoints
   crons.ts                daily purge of used signatures

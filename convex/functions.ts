@@ -20,6 +20,7 @@ const triggers = new Triggers<DataModel>();
 triggers.register("loans", COUNTERS.loans.trigger);
 triggers.register("notificationOutbox", COUNTERS.notificationOutbox.trigger);
 triggers.register("reminders", COUNTERS.reminders.trigger);
+triggers.register("reports", COUNTERS.reports.trigger);
 triggers.register("tools", COUNTERS.tools.trigger);
 triggers.register("users", COUNTERS.users.trigger);
 
