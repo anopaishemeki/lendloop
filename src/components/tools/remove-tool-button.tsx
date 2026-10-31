@@ -16,16 +16,18 @@ import { Button } from "@/components/ui/button";
 import { useToastAction } from "@/lib/use-toast-action";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import type { Availability } from "../../../convex/lib/availability";
 
 export function RemoveToolButton({
   toolId,
   toolName,
-  isOnLoan = false,
+  availability,
 }: {
   toolId: Id<"tools">;
   toolName: string;
-  isOnLoan?: boolean;
+  availability: Availability;
 }) {
+  const isOnLoan = availability === "on_loan";
   const remove = useMutation(api.tools.remove);
   const { run } = useToastAction();
 
