@@ -21,6 +21,7 @@ import {
 } from "./lib/availability";
 import { todayUtc } from "./lib/dates";
 import { cachedGet, findActiveTool, getActiveTool, mapPage } from "./lib/db";
+import { enforceRateLimit } from "./lib/limits";
 import { loansForTool, transitionLoan } from "./lib/loans";
 import { cleanText } from "./lib/text";
 import { publicProfile } from "./lib/users";
@@ -193,9 +194,11 @@ export const create = mutation({
   args: toolFields,
   handler: async (ctx, args) => {
     const viewer = await requireViewer(ctx);
+    const fields = cleanFields(args);
+    await enforceRateLimit(ctx, viewer, "newListing");
     return await ctx.db.insert("tools", {
       ...args,
-      ...cleanFields(args),
+      ...fields,
       ownerId: viewer.user._id,
       updatedAt: Date.now(),
     });
