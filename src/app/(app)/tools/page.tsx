@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { LoadMoreButton } from "@/components/load-more";
 import { RequestDialog } from "@/components/loans/request-dialog";
 import { PageHeader } from "@/components/page-header";
+import { ReportDialog } from "@/components/reports/report-dialog";
 import { CategoryFilter } from "@/components/tools/category-filter";
 import { ListToolButton } from "@/components/tools/list-tool-button";
 import { EditToolLink } from "@/components/tools/own-tool-actions";
@@ -47,11 +48,14 @@ function ToolBrowser() {
           tool.isMine ? (
             <EditToolLink toolId={tool._id} />
           ) : (
-            <RequestDialog
-              category={tool.category}
-              toolId={tool._id}
-              toolName={tool.name}
-            />
+            <>
+              <RequestDialog
+                category={tool.category}
+                toolId={tool._id}
+                toolName={tool.name}
+              />
+              <ReportDialog toolId={tool._id} toolName={tool.name} />
+            </>
           )
         }
         emptyAction={<ListToolButton />}
