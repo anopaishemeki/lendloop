@@ -89,6 +89,34 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "convex/**/*.ts",
+        "!convex/functions.ts",
+        "!convex/_generated/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "./_generated/server": {
+                    "importNames": ["mutation", "internalMutation"],
+                    "message": "Import mutation and internalMutation from ./functions so writes keep the admin counters current."
+                  },
+                  "../_generated/server": {
+                    "importNames": ["mutation", "internalMutation"],
+                    "message": "Import mutation and internalMutation from ./functions so writes keep the admin counters current."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   ]
 }
