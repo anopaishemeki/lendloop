@@ -44,6 +44,11 @@ describe("admin queries and mutations reject non-admins", () => {
     ],
     ["overview", (c) => c.query(api.admin.overview, {})],
     ["automationHealth", (c) => c.query(api.admin.automationHealth, {})],
+    ["automationOutcomes", (c) => c.query(api.admin.automationOutcomes, {})],
+    [
+      "listReports",
+      (c) => c.query(api.admin.listReports, { paginationOpts: PAGE }),
+    ],
     [
       "listNotifications",
       (c) => c.query(api.admin.listNotifications, { paginationOpts: PAGE }),
@@ -359,5 +364,84 @@ describe("admin portal", () => {
         toolName: "Tent",
       },
     ]);
+  });
+});
+
+describe("automationOutcomes", () => {
+  test("counts sent and failed deliveries and reminders per day", async () => {
+    const s = await setup();
+    const today = todayUtc();
+    const yesterday = addDays(today, -1);
+    const noon = (day: string) => Date.parse(`${day}T12:00:00Z`);
+    await s.t.run(async (ctx) => {
+      const loanId = await ctx.db.insert("loans", {
+        borrowerId: s.borrower.userId,
+        endDate: addDays(today, -3),
+        ownerId: s.owner.userId,
+        startDate: addDays(today, -5),
+        status: "approved",
+        toolId: s.toolId,
+      });
+      const delivery = {
+        attempts: 1,
+        event: "request.created" as const,
+        loanId,
+        recipientId: s.owner.userId,
+      };
+      await ctx.db.insert("notificationOutbox", {
+        ...delivery,
+        sentAt: noon(yesterday),
+        status: "sent",
+      });
+      await ctx.db.insert("notificationOutbox", {
+        ...delivery,
+        sentAt: noon(today),
+        status: "sent",
+      });
+      await ctx.db.insert("notificationOutbox", {
+        ...delivery,
+        status: "failed",
+      });
+      // Gave up yesterday (though written today): filed by failedAt.
+      await ctx.db.insert("notificationOutbox", {
+        ...delivery,
+        failedAt: noon(yesterday),
+        status: "failed",
+      });
+      for (const [reminderDate, status] of [
+        [yesterday, "sent"],
+        [today, "failed"],
+      ] as const) {
+        await ctx.db.insert("reminders", {
+          idempotencyKey: `${loanId}:${reminderDate}`,
+          loanId,
+          reminderDate,
+          status,
+          updatedAt: Date.now(),
+        });
+      }
+    });
+
+    const { deliveries, reminders } = await s.admin.caller.query(
+      api.admin.automationOutcomes,
+      {}
+    );
+    expect(deliveries).toHaveLength(14);
+    // The failed delivery has no failedAt, so it falls back to when it was queued: today.
+    expect(deliveries.slice(-2)).toEqual([
+      { day: yesterday, failed: 1, sent: 1 },
+      { day: today, failed: 1, sent: 1 },
+    ]);
+    expect(reminders.slice(-2)).toEqual([
+      { day: yesterday, failed: 0, sent: 1 },
+      { day: today, failed: 1, sent: 0 },
+    ]);
+    const quiet = [...deliveries.slice(0, -2), ...reminders.slice(0, -2)];
+    expect(quiet.every((d) => d.sent + d.failed === 0)).toBe(true);
+    // The overview's weekly figure counts every reminder, sent or failed.
+    expect(
+      (await s.admin.caller.query(api.admin.automationHealth, {}))
+        .remindersThisWeek
+    ).toBe(2);
   });
 });

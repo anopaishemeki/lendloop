@@ -2,7 +2,12 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation } from "./functions";
-import { COUNTED_TABLES, COUNTERS, type CountedTable } from "./lib/counters";
+import {
+  COUNTED_TABLES,
+  COUNTERS,
+  type CountedTable,
+  reminderCounts,
+} from "./lib/counters";
 import { isClosedStatus } from "./lib/loans";
 
 /**
@@ -89,6 +94,25 @@ export const backfillAllCounters = internalMutation({
       before,
       cursor: isDone ? null : continueCursor,
       tableIndex: isDone ? tableIndex + 1 : tableIndex,
+    });
+    return null;
+  },
+  returns: v.null(),
+});
+
+/**
+ * Rebuilds the reminder counter after its key changed (now per outcome): clears
+ * it, then hands off to backfillAllCounters from the reminders table. Run once
+ * after deploying that change:
+ *   npx convex run migrations:rebuildReminderCounts
+ */
+export const rebuildReminderCounts = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    await reminderCounts.clearAll(ctx);
+    await ctx.scheduler.runAfter(0, internal.migrations.backfillAllCounters, {
+      before: Date.now(),
+      tableIndex: COUNTED_TABLES.indexOf("reminders"),
     });
     return null;
   },

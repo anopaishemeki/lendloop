@@ -4,7 +4,12 @@ import type { Trigger } from "convex-helpers/server/triggers";
 import { components } from "../_generated/api";
 import type { DataModel, Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import type { DeliveryStatus, LoanStatus, ReportStatus } from "./validators";
+import type {
+  DeliveryStatus,
+  LoanStatus,
+  ReminderStatus,
+  ReportStatus,
+} from "./validators";
 
 /**
  * Maintained counts for the admin overview, kept in step with the tables by
@@ -60,11 +65,11 @@ export const toolCounts = new TableAggregate<{
   TableName: "tools";
 }>(components.toolCounts, toolKey);
 
-/** Deliveries per status, ordered by when they were sent (or queued). */
+/** Deliveries per status, ordered by when they were sent or failed (or queued). */
 const deliveryKey = {
   namespace: (entry: Doc<"notificationOutbox">): DeliveryStatus => entry.status,
   sortKey: (entry: Doc<"notificationOutbox">) =>
-    entry.sentAt ?? entry._creationTime,
+    entry.sentAt ?? entry.failedAt ?? entry._creationTime,
 };
 export const deliveryCounts = new TableAggregate<{
   DataModel: DataModel;
@@ -73,13 +78,15 @@ export const deliveryCounts = new TableAggregate<{
   TableName: "notificationOutbox";
 }>(components.deliveryCounts, deliveryKey);
 
-/** Overdue reminders written back by n8n, ordered by reminder day. */
+/** Overdue reminders per outcome, ordered by reminder day. */
 const reminderKey = {
+  namespace: (reminder: Doc<"reminders">): ReminderStatus => reminder.status,
   sortKey: (reminder: Doc<"reminders">) => reminder.reminderDate,
 };
 export const reminderCounts = new TableAggregate<{
   DataModel: DataModel;
   Key: string;
+  Namespace: ReminderStatus;
   TableName: "reminders";
 }>(components.reminderCounts, reminderKey);
 
