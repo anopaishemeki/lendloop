@@ -52,8 +52,8 @@ export function RemoveToolButton({
         <AlertDialogFooter>
           <AlertDialogCancel>Keep listing</AlertDialogCancel>
           <AlertDialogAction
-            className="bg-destructive hover:bg-destructive/90 text-white"
             onClick={() => run(() => remove({ toolId }), `${toolName} removed`)}
+            variant="destructive"
           >
             Remove
           </AlertDialogAction>
