@@ -47,6 +47,8 @@ export default defineSchema({
   notificationOutbox: defineTable({
     attempts: v.number(),
     event: notificationEventValidator,
+    // When delivery gave up; the outcomes chart files failures by it.
+    failedAt: v.optional(v.number()),
     lastError: v.optional(v.string()),
     loanId: v.id("loans"),
     recipientId: v.id("users"),
@@ -55,6 +57,12 @@ export default defineSchema({
   })
     .index("by_loan", ["loanId"])
     .index("by_status", ["status"]),
+
+  // Failures not yet emailed to ops; the alert cron reads and clears them.
+  pendingAlerts: defineTable({
+    error: v.string(),
+    kind: v.union(v.literal("delivery"), v.literal("reminder")),
+  }),
 
   // Overdue reminders written back by n8n; idempotencyKey is unique per loan per day.
   reminders: defineTable({

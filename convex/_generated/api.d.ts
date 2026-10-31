@@ -9,11 +9,13 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as alerts from "../alerts.js";
 import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
 import type * as functions from "../functions.js";
 import type * as http from "../http.js";
 import type * as lib_activity from "../lib/activity.js";
+import type * as lib_alerts from "../lib/alerts.js";
 import type * as lib_availability from "../lib/availability.js";
 import type * as lib_counters from "../lib/counters.js";
 import type * as lib_dates from "../lib/dates.js";
@@ -44,11 +46,13 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  alerts: typeof alerts;
   auth: typeof auth;
   crons: typeof crons;
   functions: typeof functions;
   http: typeof http;
   "lib/activity": typeof lib_activity;
+  "lib/alerts": typeof lib_alerts;
   "lib/availability": typeof lib_availability;
   "lib/counters": typeof lib_counters;
   "lib/dates": typeof lib_dates;
