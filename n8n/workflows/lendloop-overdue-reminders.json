@@ -6,14 +6,14 @@
         "rule": {
           "interval": [
             {
-              "field": "days",
-              "triggerAtHour": 8
+              "field": "cronExpression",
+              "expression": "0 8-17 * * *"
             }
           ]
         }
       },
       "id": "e7d2f4a1-3b6c-4d8e-9f01-a2b3c4d5e601",
-      "name": "Every day at 08:00 UTC",
+      "name": "Hourly 08:00-17:00 UTC",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
@@ -205,7 +205,7 @@
     }
   ],
   "connections": {
-    "Every day at 08:00 UTC": {
+    "Hourly 08:00-17:00 UTC": {
       "main": [
         [
           {
