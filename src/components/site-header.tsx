@@ -19,7 +19,7 @@ import { firstName } from "../../convex/lib/users";
 
 const TOOL_FORM_PATH = /^\/tools\/(?:new|[^/]+\/edit)$/u;
 
-type NavItem = {
+export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
@@ -46,7 +46,14 @@ const ADMIN_NAV: NavItem = {
   label: "Admin",
 };
 
-function NavLinks({ items }: { items: NavItem[] }) {
+/** Nav links with the current page highlighted; `className` sets the shape. */
+export function NavLinks({
+  items,
+  className = "rounded-full px-3 py-1.5",
+}: {
+  items: NavItem[];
+  className?: string;
+}) {
   const pathname = usePathname();
   return (
     <>
@@ -56,7 +63,8 @@ function NavLinks({ items }: { items: NavItem[] }) {
           <Link
             aria-current={active ? "page" : undefined}
             className={cn(
-              "text-muted-foreground hover:bg-muted hover:text-foreground inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
+              "text-muted-foreground hover:bg-muted hover:text-foreground inline-flex items-center gap-1.5 text-sm font-medium whitespace-nowrap transition-colors",
+              className,
               active &&
                 "bg-secondary text-secondary-foreground hover:bg-secondary"
             )}

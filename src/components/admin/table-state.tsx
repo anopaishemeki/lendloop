@@ -15,10 +15,13 @@ type Paginated<T> = Omit<ReturnType<typeof usePaginatedQuery>, "results"> & {
 export function TableState<T>({
   query,
   empty,
+  showLoadMore = true,
   children,
 }: {
   query: Paginated<T>;
   empty: string;
+  /** Off for previews that link to the full list instead. */
+  showLoadMore?: boolean;
   children: (rows: T[]) => ReactNode;
 }) {
   const { results, status, loadMore } = query;
@@ -29,7 +32,8 @@ export function TableState<T>({
       <div className="surface overflow-hidden">
         <Table>{children(results)}</Table>
       </div>
-      {status === "CanLoadMore" || status === "LoadingMore" ? (
+      {showLoadMore &&
+      (status === "CanLoadMore" || status === "LoadingMore") ? (
         <Button
           disabled={status === "LoadingMore"}
           onClick={() => loadMore(ADMIN_PAGE_SIZE)}

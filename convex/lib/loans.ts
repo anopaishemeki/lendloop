@@ -27,6 +27,15 @@ export function loansForTool(
     .collect();
 }
 
+/** Approved loans past their end date, oldest end date first. */
+export function overdueLoans(ctx: QueryCtx, today: string) {
+  return ctx.db
+    .query("loans")
+    .withIndex("by_status_and_end_date", (q) =>
+      q.eq("status", "approved").lt("endDate", today)
+    );
+}
+
 export function isOverdue(
   loan: Pick<Doc<"loans">, "status" | "endDate">,
   today: string

@@ -3,6 +3,7 @@ import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { addDays, todayUtc } from "./lib/dates";
 import { verifyRequest } from "./lib/hmac";
+import { REDRIVE_LIMIT } from "./lib/validators";
 import { identityFor, newTest } from "./test.setup";
 
 const WEBHOOK =
@@ -229,6 +230,37 @@ describe("delivery", () => {
 });
 
 describe("redriveFailed", () => {
+  test("drains more than one batch from a single call", async () => {
+    vi.stubEnv("N8N_REQUEST_WEBHOOK_URL", WEBHOOK);
+    vi.stubEnv("N8N_OUTBOUND_SECRET", SECRET);
+    vi.stubEnv("APP_URL", "https://lendloop.example");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ received: true }))
+    );
+    const s = await setup();
+    const loanId = await request(s);
+    await drain(s.t);
+    await s.t.run(async (ctx) => {
+      for (let i = 0; i <= REDRIVE_LIMIT; i += 1) {
+        await ctx.db.insert("notificationOutbox", {
+          attempts: 6,
+          event: "request.created",
+          loanId,
+          recipientId: s.owner.userId,
+          status: "failed",
+        });
+      }
+    });
+
+    expect(await s.t.mutation(internal.notifications.redriveFailed, {})).toBe(
+      REDRIVE_LIMIT
+    );
+    await drain(s.t);
+    const rows = await outbox(s.t);
+    expect(rows.filter((row) => row.status === "failed")).toEqual([]);
+  });
+
   test("re-queues failed events once the outage is fixed", async () => {
     vi.stubEnv("N8N_REQUEST_WEBHOOK_URL", WEBHOOK);
     vi.stubEnv("N8N_OUTBOUND_SECRET", SECRET);

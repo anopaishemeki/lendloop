@@ -6,7 +6,7 @@ import { roleFromMetadata } from "../../convex/lib/roles";
 const PUBLIC_PREFIXES = ["/sign-in", "/sign-up"] as const;
 const ADMIN_PREFIX = "/admin";
 
-function matchesPrefix(pathname: string, prefix: string) {
+export function matchesPrefix(pathname: string, prefix: string) {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 

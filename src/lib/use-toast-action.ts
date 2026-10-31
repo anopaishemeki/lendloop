@@ -6,16 +6,20 @@ import { errorMessage } from "./errors";
 
 /**
  * Runs an async action with a pending flag, a success toast and a readable
- * error toast. Resolves to whether the action succeeded.
+ * error toast. The success message may depend on the action's result.
+ * Resolves to whether the action succeeded.
  */
 export function useToastAction() {
   const [pending, setPending] = useState(false);
 
-  const run = async (action: () => Promise<unknown>, success: string) => {
+  const run = async <T>(
+    action: () => Promise<T>,
+    success: string | ((result: T) => string)
+  ) => {
     setPending(true);
     try {
-      await action();
-      toast.success(success);
+      const result = await action();
+      toast.success(typeof success === "string" ? success : success(result));
       return true;
     } catch (error) {
       toast.error(errorMessage(error));

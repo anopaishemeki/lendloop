@@ -35,7 +35,12 @@ A neighborhood tool-lending board. Neighbors list tools they're happy to lend, r
   - Owners approve, decline, mark returned or cancel.
   - Borrowers withdraw a request or cancel before the loan starts.
   - Each loan shows its recent automation, e.g. "Overdue reminder sent to you 2 days ago" (bonus feature).
-- **Admin** (`/admin`): all loans with a status filter, remove any listing, mark lenders as Trusted Lender.
+- **Admin portal** (`/admin`): its own layout with a sidebar, and one page per job:
+  - **Overview:** neighbors, live listings, pending and approved loans, overdue loans and failed notifications, each linking to the page that deals with it; loans by status; automation health; the latest loans.
+  - **Loans:** every loan with a status filter (the overview cards link here pre-filtered).
+  - **Listings:** remove any listing.
+  - **Neighbors:** mark lenders as Trusted Lender.
+  - **Automation:** every request-notification delivery with its status, attempts and last error, a **Retry failed** button, and the overdue-reminder log.
 
 **Automation**
 - **Request notifications:** every request and status change sends an HMAC-signed event to an n8n Cloud production webhook, and n8n emails the person concerned.
@@ -129,7 +134,7 @@ npm ci
    { "metadata": "{{user.public_metadata}}" }
    ```
 
-   The Next.js proxy reads this claim to redirect non-admins away from `/admin`.
+   The Next.js proxy reads this claim to redirect non-admins away from `/admin` before the page loads. Without it the proxy lets the request through and the admin portal shows non-admins an "Admins only" screen instead, based on the Convex role. Either way every admin function checks the role in Convex.
 
 ### 3. Convex
 
@@ -265,7 +270,7 @@ There are two roles:
 - Only 5xx, 408, 429 and network errors are retried.
 - Each attempt is counted in the same transaction that snapshots the payload.
 - Failures are recorded on the outbox row and logged.
-- After fixing an outage, run `npx convex run notifications:redriveFailed` to resend failed events.
+- After fixing an outage, resend failed events with **Retry failed** on `/admin/automation`, or `npx convex run notifications:redriveFailed`. Either re-queues them all, 100 at a time.
 
 **Duplicates**
 - n8n sends with a Resend `Idempotency-Key` derived from the event ID, so a retried delivery never sends a second email.
@@ -308,7 +313,7 @@ There are two roles:
 ## Assumptions and what is not verified end to end
 
 **Verified:**
-- by tests (133 total: Convex functions via `convex-test`, HTTP endpoints via `t.fetch`, and the exported n8n Code-node JavaScript run in Node):
+- by tests (148 total: Convex functions via `convex-test`, HTTP endpoints via `t.fetch`, and the exported n8n Code-node JavaScript run in Node):
   - RBAC
   - the state machine, overlap and date rules
   - payload minimization
@@ -340,6 +345,7 @@ The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import
   - To rotate without downtime, accept a list of active secrets during the overlap. Today a single secret is configured per direction.
 - **Scale:**
   - Paginate `tools.list` and the loan boards. They load everything at neighborhood scale; admin lists are already paginated.
+  - Keep counters (for example `@convex-dev/aggregate`) for the admin overview. Today it counts up to 1,000 rows per number, and because queries are reactive, writes to the counted tables re-run it; delivery counts are a separate query so retries only re-run that one.
   - Overdue reminders take 200 loans per run; schedule more frequent runs if the backlog grows.
   - Consider a counter table for availability instead of a per-tool index read.
 - **Observability:**
@@ -368,7 +374,7 @@ The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import
 
 ```
 src/
-  app/                    App Router pages: "/", sign-in/up, (app)/tools, /my/*, /admin
+  app/                    App Router pages: "/", sign-in/up, (app)/tools and /my/*, (admin)/admin/* portal
   components/             UI by feature (tools/, loans/, admin/) + shadcn ui/
   lib/                    client helpers (route rules, labels, dates, toasts)
   proxy.ts                Clerk middleware: protects routes, admin redirect

@@ -7,7 +7,13 @@ export default clerkMiddleware(async (auth, req) => {
   if (isPublicRoute(pathname)) return;
 
   const { sessionClaims } = await auth.protect();
-  if (!canAccessRoute(pathname, sessionClaims.metadata)) {
+  // Navigation only: Convex enforces the role on every admin function. When the
+  // session token carries no `metadata` claim (see README, Clerk setup), let
+  // the request through and the admin portal decides from Convex instead.
+  if (
+    sessionClaims.metadata !== undefined &&
+    !canAccessRoute(pathname, sessionClaims.metadata)
+  ) {
     return NextResponse.redirect(new URL("/tools", req.url));
   }
 });

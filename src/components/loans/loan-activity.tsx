@@ -5,6 +5,7 @@ import type { FunctionReturnType } from "convex/server";
 import { formatDistanceToNow } from "date-fns";
 import { BellRing, CircleAlert, Clock, Mail } from "lucide-react";
 import { useEffect, useState } from "react";
+import { AUTOMATION_LABELS } from "@/lib/automation-labels";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -12,17 +13,8 @@ type Activity = FunctionReturnType<typeof api.loans.activity>[number];
 
 const MINUTE_MS = 60_000;
 
-const LABELS: Record<Activity["kind"], string> = {
-  "loan.returned": "Return confirmation",
-  "overdue.reminder": "Overdue reminder",
-  "request.approved": "Approval email",
-  "request.cancelled": "Cancellation email",
-  "request.created": "New request email",
-  "request.declined": "Decline email",
-};
-
 function describe(item: Activity, otherName: string, now: number) {
-  const what = LABELS[item.kind];
+  const what = AUTOMATION_LABELS[item.kind];
   const who = item.toViewer ? "you" : otherName;
   const when = formatDistanceToNow(item.at, { addSuffix: true });
   if (item.status === "sent") return `${what} sent to ${who} ${when}`;
