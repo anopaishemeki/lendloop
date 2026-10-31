@@ -77,8 +77,9 @@ const EVENTS: Partial<Record<LoanStatus, NotificationEvent>> = {
  * Who hears about a change: the borrower, except when the borrower cancelled,
  * in which case the owner does. System changes (no actor) go to the borrower.
  */
-function recipientOf(
-  loan: Doc<"loans">,
+/** Who hears about a loan moving to `to` (shared with the demo seed). */
+export function recipientOf(
+  loan: Pick<Doc<"loans">, "borrowerId" | "ownerId">,
   to: LoanStatus,
   actorId?: Id<"users">
 ): Id<"users"> {

@@ -125,6 +125,8 @@ export const onDelivered = internalMutation({
   args: vOnCompleteArgs(v.object({ outboxId: v.id("notificationOutbox") })),
   handler: async (ctx, { context, result }) => {
     const { outboxId } = context;
+    // The row may be gone (a cleanup such as seed:removeE2E); nothing to record.
+    if (!(await ctx.db.get(outboxId))) return null;
     if (result.kind === "success") {
       await ctx.db.patch(outboxId, { sentAt: Date.now(), status: "sent" });
       return null;
