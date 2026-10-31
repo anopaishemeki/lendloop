@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/logo";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import { NameWithBadge } from "@/components/trusted-lender-badge";
 import { cn } from "@/lib/utils";
 import { api } from "../../convex/_generated/api";
@@ -104,6 +105,7 @@ export function SiteHeader() {
               Hi, {firstName(me.name)}
             </NameWithBadge>
           ) : null}
+          <ThemeSwitcher />
           <UserButton />
         </div>
       </div>
