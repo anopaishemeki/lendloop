@@ -4,7 +4,7 @@ import type { Trigger } from "convex-helpers/server/triggers";
 import { components } from "../_generated/api";
 import type { DataModel, Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import type { DeliveryStatus, LoanStatus } from "./validators";
+import type { DeliveryStatus, LoanStatus, ReportStatus } from "./validators";
 
 /**
  * Maintained counts for the admin overview, kept in step with the tables by
@@ -16,6 +16,7 @@ export const COUNTED_TABLES = [
   "loans",
   "notificationOutbox",
   "reminders",
+  "reports",
   "tools",
   "users",
 ] as const;
@@ -82,6 +83,16 @@ export const reminderCounts = new TableAggregate<{
   TableName: "reminders";
 }>(components.reminderCounts, reminderKey);
 
+/** Listing reports, keyed by status (so "open" is an exact count). */
+const reportKey = {
+  sortKey: (report: Doc<"reports">): ReportStatus => report.status,
+};
+export const reportCounts = new TableAggregate<{
+  DataModel: DataModel;
+  Key: ReportStatus;
+  TableName: "reports";
+}>(components.reportCounts, reportKey);
+
 type Counter<T extends CountedTable> = {
   /** Keeps the counter in step with one change to the table. */
   trigger: Trigger<MutationCtx, DataModel, T>;
@@ -132,6 +143,7 @@ export const COUNTERS: { [T in CountedTable]: Counter<T> } = {
   loans: counter(loanCounts, loanKey),
   notificationOutbox: counter(deliveryCounts, deliveryKey),
   reminders: counter(reminderCounts, reminderKey),
+  reports: counter(reportCounts, reportKey),
   tools: counter(toolCounts, toolKey),
   users: counter(userCounts, userKey),
 };

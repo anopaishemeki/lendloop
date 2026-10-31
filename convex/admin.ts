@@ -12,6 +12,7 @@ import {
   deliveryCounts,
   loanCounts,
   reminderCounts,
+  reportCounts,
   toolCounts,
   userCounts,
 } from "./lib/counters";
@@ -28,6 +29,8 @@ import {
   loanStatusValidator,
   notificationEventValidator,
   reminderStatusValidator,
+  reportReasonValidator,
+  reportStatusValidator,
 } from "./lib/validators";
 
 // Admins see full names (not just first names) so they can tell people apart.
@@ -199,6 +202,7 @@ const overviewView = v.object({
     ) as Record<LoanStatus, ReturnType<typeof v.number>>
   ),
   neighbors: v.number(),
+  openReports: v.number(),
   overdue: v.number(),
   trustedLenders: v.number(),
 });
@@ -212,24 +216,30 @@ export const overview = query({
   args: {},
   handler: async (ctx) => {
     await requireAdmin(ctx);
-    // Three counter calls: users, tools, and every loan figure in one batch.
-    const [[neighbors = 0, trustedLenders = 0], listings, loanTotals] =
-      await Promise.all([
-        userCounts.countBatch(ctx, [
-          {},
-          { bounds: { lower: { inclusive: true, key: 1 } } },
-        ]),
-        toolCounts.count(ctx, {
-          bounds: { upper: { inclusive: true, key: 0 } },
-        }),
-        loanCounts.countBatch(ctx, [
-          ...LOAN_STATUSES.map((namespace) => ({ namespace })),
-          {
-            bounds: { upper: { inclusive: false, key: todayUtc() } },
-            namespace: "approved" as const,
-          },
-        ]),
-      ]);
+    // Four counter calls: users, tools, reports, and every loan figure in one batch.
+    const open = { inclusive: true, key: "open" as const };
+    const [
+      [neighbors = 0, trustedLenders = 0],
+      listings,
+      openReports,
+      loanTotals,
+    ] = await Promise.all([
+      userCounts.countBatch(ctx, [
+        {},
+        { bounds: { lower: { inclusive: true, key: 1 } } },
+      ]),
+      toolCounts.count(ctx, {
+        bounds: { upper: { inclusive: true, key: 0 } },
+      }),
+      reportCounts.count(ctx, { bounds: { lower: open, upper: open } }),
+      loanCounts.countBatch(ctx, [
+        ...LOAN_STATUSES.map((namespace) => ({ namespace })),
+        {
+          bounds: { upper: { inclusive: false, key: todayUtc() } },
+          namespace: "approved" as const,
+        },
+      ]),
+    ]);
     const overdue = loanTotals[LOAN_STATUSES.length] ?? 0;
     return {
       listings,
@@ -237,6 +247,7 @@ export const overview = query({
         LOAN_STATUSES.map((status, i) => [status, loanTotals[i] ?? 0])
       ) as Record<LoanStatus, number>,
       neighbors,
+      openReports,
       overdue,
       trustedLenders,
     };
@@ -382,4 +393,84 @@ export const retryFailedNotifications = mutation({
     return await redriveFailedDeliveries(ctx);
   },
   returns: v.number(),
+});
+
+const adminReportView = v.object({
+  _creationTime: v.number(),
+  _id: v.id("reports"),
+  // Absent once the listing is removed.
+  availability: v.optional(availabilityValidator),
+  details: v.optional(v.string()),
+  owner: adminPersonView,
+  reason: reportReasonValidator,
+  reporter: adminPersonView,
+  status: reportStatusValidator,
+  toolId: v.id("tools"),
+  toolName: v.string(),
+});
+
+/** Listing reports, newest first; the queue defaults to open ones. */
+export const listReports = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    status: v.optional(reportStatusValidator),
+  },
+  handler: async (ctx, { paginationOpts, status }) => {
+    await requireAdmin(ctx);
+    const rows = status
+      ? ctx.db
+          .query("reports")
+          .withIndex("by_status", (q) => q.eq("status", status))
+      : ctx.db.query("reports");
+    const result = await rows.order("desc").paginate(paginationOpts);
+    const today = todayUtc();
+    const get = cachedGet(ctx);
+    return await mapPage(result, async (report) => {
+      const [tool, reporter] = await Promise.all([
+        get(report.toolId),
+        get(report.reporterId),
+      ]);
+      const live = tool?.removedAt === undefined ? tool : null;
+      const [owner, availability] = await Promise.all([
+        tool ? get(tool.ownerId) : null,
+        live ? availabilityOf(ctx, live._id, today) : undefined,
+      ]);
+      return {
+        _creationTime: report._creationTime,
+        _id: report._id,
+        availability,
+        details: report.details,
+        owner: adminPerson(owner),
+        reason: report.reason,
+        reporter: adminPerson(reporter),
+        status: report.status,
+        toolId: report.toolId,
+        toolName: toolNameOf(tool),
+      };
+    });
+  },
+  returns: paginationResultValidator(adminReportView),
+});
+
+/**
+ * Closes one open report without action. To act on a report, remove the
+ * listing (tools.remove), which closes every open report about it.
+ */
+export const dismissReport = mutation({
+  args: { reportId: v.id("reports") },
+  handler: async (ctx, { reportId }) => {
+    const viewer = await requireAdmin(ctx);
+    const report = await ctx.db.get(reportId);
+    if (!report) fail("NOT_FOUND", "That report no longer exists.");
+    if (report.status !== "open") {
+      fail("INVALID_TRANSITION", "That report is already resolved.");
+    }
+    await ctx.db.patch(reportId, {
+      resolvedAt: Date.now(),
+      resolvedBy: viewer.user._id,
+      status: "dismissed",
+    });
+    return null;
+  },
+  returns: v.null(),
 });
