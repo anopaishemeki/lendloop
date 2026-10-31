@@ -57,9 +57,7 @@ export function LoanCard({ loan }: { loan: LoanView }) {
         </p>
         <Neighbor
           firstName={loan.counterpart.firstName}
-          isTrustedLender={
-            loan.role === "borrower" && loan.counterpart.isTrustedLender
-          }
+          isTrustedLender={loan.counterpart.isTrustedLender}
           prefix={loan.role === "owner" ? "Requested by" : "Lent by"}
         />
         {loan.note ? (

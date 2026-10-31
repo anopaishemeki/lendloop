@@ -134,6 +134,7 @@ describe("delivery", () => {
     expect(Object.keys(payload).sort()).toEqual([
       "appUrl",
       "counterpartFirstName",
+      "counterpartIsTrustedLender",
       "event",
       "eventId",
       "loan",
@@ -144,6 +145,7 @@ describe("delivery", () => {
     expect(payload).toMatchObject({
       appUrl: "https://lendloop.example/my/incoming",
       counterpartFirstName: "ben",
+      counterpartIsTrustedLender: false,
       event: "request.created",
       recipient: { email: "olive@example.test", firstName: "olive" },
       toolName: "Stand mixer",

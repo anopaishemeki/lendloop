@@ -96,9 +96,9 @@ describe("admin views", () => {
     });
     expect(loans).toHaveLength(1);
     expect(loans[0]).toMatchObject({
-      borrowerName: "ben",
+      borrower: { name: "ben" },
       isOverdue: true,
-      ownerName: "olive",
+      owner: { name: "olive" },
       toolName: "Tent",
     });
     expect(
@@ -117,7 +117,7 @@ describe("admin views", () => {
       (await admin.caller.query(api.admin.listTools, { paginationOpts: PAGE }))
         .page
     ).toMatchObject([
-      { availability: "available", name: "Tent", ownerName: "olive" },
+      { availability: "available", name: "Tent", owner: { name: "olive" } },
     ]);
     await admin.caller.mutation(api.tools.remove, { toolId });
     expect(
@@ -221,6 +221,18 @@ describe("admin portal", () => {
       userId: s.owner.userId,
     });
 
+    const [loan] = (
+      await s.admin.caller.query(api.admin.listLoans, { paginationOpts: PAGE })
+    ).page;
+    expect(loan).toMatchObject({
+      borrower: { isTrustedLender: false },
+      owner: { isTrustedLender: true },
+    });
+    const [tool] = (
+      await s.admin.caller.query(api.admin.listTools, { paginationOpts: PAGE })
+    ).page;
+    expect(tool?.owner.isTrustedLender).toBe(true);
+
     expect(await s.admin.caller.query(api.admin.overview, {})).toMatchObject({
       listings: 1,
       loans: { approved: 1, requested: 0 },
@@ -279,7 +291,7 @@ describe("admin portal", () => {
         attempts: 6,
         event: "request.created",
         lastError: "HTTP 500",
-        recipientName: "olive",
+        recipient: { name: "olive" },
         toolName: "Tent",
       },
     ]);
@@ -316,7 +328,7 @@ describe("admin portal", () => {
     });
     expect(reminders.page).toMatchObject([
       {
-        borrowerName: "ben",
+        borrower: { name: "ben" },
         reminderDate: today,
         status: "sent",
         toolName: "Tent",

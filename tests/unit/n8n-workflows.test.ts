@@ -231,6 +231,17 @@ describe("request notifications: Build email node", () => {
     expect(email.html).toContain(`href="${base.appUrl}"`);
   });
 
+  test("shows the Trusted Lender badge for a trusted neighbor", async () => {
+    const trusted = await buildEmail({ counterpartIsTrustedLender: true });
+    expect(trusted.html).toContain("✓ Trusted lender");
+    expect(trusted.html).not.toContain("is a Trusted Lender");
+    expect(trusted.text).toContain("Ben is a Trusted Lender on LendLoop.");
+
+    const plain = await buildEmail({ counterpartIsTrustedLender: false });
+    expect(plain.html).not.toContain("Trusted lender");
+    expect(plain.text).not.toContain("Trusted Lender");
+  });
+
   test("words the email around a listing that is gone", async () => {
     const email = await buildEmail({
       event: "request.cancelled",
@@ -298,6 +309,7 @@ describe("overdue reminders: Build reminder node", () => {
           idempotencyKey: "loan1:2026-10-30",
           loanId: "loan1",
           ownerFirstName: "Olive",
+          ownerIsTrustedLender: true,
           reminderDate: "2026-10-30",
           toolName: "Ladder",
         },
@@ -312,6 +324,8 @@ describe("overdue reminders: Build reminder node", () => {
     expect(email.json.text).toContain("Thu 29 Oct 2026 (1 day ago)");
     expect(email.json.html).toContain("Time to return the Ladder");
     expect(email.json.html).toContain("Overdue · 1 day");
+    expect(email.json.html).toContain("✓ Trusted lender");
+    expect(email.json.text).toContain("Olive is a Trusted Lender on LendLoop.");
   });
 });
 

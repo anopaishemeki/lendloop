@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/logo";
+import { NameWithBadge } from "@/components/trusted-lender-badge";
 import { cn } from "@/lib/utils";
 import { api } from "../../convex/_generated/api";
 import { firstName } from "../../convex/lib/users";
@@ -96,9 +97,12 @@ export function SiteHeader() {
         </nav>
         <div className="ml-auto flex items-center gap-3">
           {me ? (
-            <span className="text-muted-foreground hidden text-sm lg:inline">
+            <NameWithBadge
+              className="text-muted-foreground hidden text-sm lg:inline-flex"
+              isTrustedLender={me.isTrustedLender}
+            >
               Hi, {firstName(me.name)}
-            </span>
+            </NameWithBadge>
           ) : null}
           <UserButton />
         </div>

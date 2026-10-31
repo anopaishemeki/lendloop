@@ -11,6 +11,7 @@ import { addDays, DAY_MS, todayUtc } from "./lib/dates";
 import { cachedGet } from "./lib/db";
 import { isOverdue, overdueLoans } from "./lib/loans";
 import { redriveFailedDeliveries } from "./lib/notifications";
+import { isTrustedLender } from "./lib/users";
 import {
   COUNT_CAP,
   categoryValidator,
@@ -23,13 +24,26 @@ import {
   reminderStatusValidator,
 } from "./lib/validators";
 
+// Admins see full names (not just first names) so they can tell people apart.
+const adminPersonView = v.object({
+  isTrustedLender: v.boolean(),
+  name: v.string(),
+});
+
+function adminPerson(user: Doc<"users"> | null) {
+  return {
+    isTrustedLender: isTrustedLender(user),
+    name: user?.name ?? "Unknown",
+  };
+}
+
 const adminLoanView = v.object({
   _creationTime: v.number(),
   _id: v.id("loans"),
-  borrowerName: v.string(),
+  borrower: adminPersonView,
   endDate: v.string(),
   isOverdue: v.boolean(),
-  ownerName: v.string(),
+  owner: adminPersonView,
   startDate: v.string(),
   status: loanStatusValidator,
   toolName: v.string(),
@@ -40,7 +54,7 @@ const adminToolView = v.object({
   availability: availabilityValidator,
   category: categoryValidator,
   name: v.string(),
-  ownerName: v.string(),
+  owner: adminPersonView,
 });
 
 const adminUserView = v.object({
@@ -63,13 +77,8 @@ function loansFiltered(
     .order("desc");
 }
 
-// Admins see full names (not just first names) so they can tell people apart.
 function toolNameOf(tool: Doc<"tools"> | null) {
   return tool?.name ?? "Removed tool";
-}
-
-function nameOf(user: Doc<"users"> | null) {
-  return user?.name ?? "Unknown";
 }
 
 /** Every loan, newest first, optionally narrowed to one status. */
@@ -97,10 +106,10 @@ export const listLoans = query({
         return {
           _creationTime: loan._creationTime,
           _id: loan._id,
-          borrowerName: nameOf(borrower),
+          borrower: adminPerson(borrower),
           endDate: loan.endDate,
           isOverdue: isOverdue(loan, today),
-          ownerName: nameOf(owner),
+          owner: adminPerson(owner),
           startDate: loan.startDate,
           status: loan.status,
           toolName: toolNameOf(tool),
@@ -135,7 +144,7 @@ export const listTools = query({
           availability,
           category: tool.category,
           name: tool.name,
-          ownerName: nameOf(owner),
+          owner: adminPerson(owner),
         };
       })
     );
@@ -155,10 +164,10 @@ export const listUsers = query({
       .paginate(paginationOpts);
     return {
       ...result,
-      page: result.page.map(({ _id, isTrustedLender, name }) => ({
-        _id,
-        isTrustedLender,
-        name,
+      page: result.page.map((user) => ({
+        _id: user._id,
+        isTrustedLender: user.isTrustedLender,
+        name: user.name,
       })),
     };
   },
@@ -289,7 +298,7 @@ const adminNotificationView = v.object({
   attempts: v.number(),
   event: notificationEventValidator,
   lastError: v.optional(v.string()),
-  recipientName: v.string(),
+  recipient: adminPersonView,
   sentAt: v.optional(v.number()),
   status: deliveryStatusValidator,
   toolName: v.string(),
@@ -323,7 +332,7 @@ export const listNotifications = query({
           attempts: entry.attempts,
           event: entry.event,
           lastError: entry.lastError,
-          recipientName: nameOf(recipient),
+          recipient: adminPerson(recipient),
           sentAt: entry.sentAt,
           status: entry.status,
           toolName: toolNameOf(tool),
@@ -337,7 +346,7 @@ export const listNotifications = query({
 
 const adminReminderView = v.object({
   _id: v.id("reminders"),
-  borrowerName: v.string(),
+  borrower: adminPersonView,
   error: v.optional(v.string()),
   reminderDate: v.string(),
   status: reminderStatusValidator,
@@ -363,7 +372,7 @@ export const listReminders = query({
           : [null, null];
         return {
           _id: reminder._id,
-          borrowerName: nameOf(borrower),
+          borrower: adminPerson(borrower),
           error: reminder.error,
           reminderDate: reminder.reminderDate,
           status: reminder.status,

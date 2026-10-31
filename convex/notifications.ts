@@ -5,7 +5,7 @@ import { internalAction, internalMutation } from "./_generated/server";
 import { appUrl as appUrlFromEnv } from "./lib/env";
 import { SIGNATURE_HEADER, signRequest, TIMESTAMP_HEADER } from "./lib/hmac";
 import { redriveFailedDeliveries } from "./lib/notifications";
-import { firstName } from "./lib/users";
+import { firstName, isTrustedLender } from "./lib/users";
 import { notificationEventValidator } from "./lib/validators";
 
 const MAX_ERROR_LENGTH = 500;
@@ -19,6 +19,8 @@ const FETCH_TIMEOUT_MS = 60_000;
 const payloadValidator = v.object({
   appUrl: v.string(),
   counterpartFirstName: v.string(),
+  // Lets the email show the same Trusted Lender badge the app shows.
+  counterpartIsTrustedLender: v.boolean(),
   event: notificationEventValidator,
   eventId: v.string(),
   loan: v.object({ endDate: v.string(), startDate: v.string() }),
@@ -51,6 +53,7 @@ export const startAttempt = internalMutation({
       counterpartFirstName: counterpart
         ? firstName(counterpart.name)
         : "A neighbor",
+      counterpartIsTrustedLender: isTrustedLender(counterpart),
       event: entry.event,
       eventId: outboxId,
       loan: { endDate: loan.endDate, startDate: loan.startDate },

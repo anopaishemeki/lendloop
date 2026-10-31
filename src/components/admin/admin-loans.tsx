@@ -6,6 +6,7 @@ import {
   LoanStatusBadge,
   loanStatusLabel,
 } from "@/components/loans/loan-status-badge";
+import { NameWithBadge } from "@/components/trusted-lender-badge";
 import {
   Select,
   SelectContent,
@@ -112,8 +113,18 @@ function LoanTable({
             {rows.map((loan) => (
               <TableRow key={loan._id}>
                 <TableCell className="font-medium">{loan.toolName}</TableCell>
-                <TableCell>{loan.ownerName}</TableCell>
-                <TableCell>{loan.borrowerName}</TableCell>
+                <TableCell>
+                  <NameWithBadge isTrustedLender={loan.owner.isTrustedLender}>
+                    {loan.owner.name}
+                  </NameWithBadge>
+                </TableCell>
+                <TableCell>
+                  <NameWithBadge
+                    isTrustedLender={loan.borrower.isTrustedLender}
+                  >
+                    {loan.borrower.name}
+                  </NameWithBadge>
+                </TableCell>
                 <TableCell>
                   {formatRange(loan.startDate, loan.endDate)}
                 </TableCell>

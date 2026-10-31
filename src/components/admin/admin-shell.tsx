@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/empty-state";
 import { Logo } from "@/components/logo";
 import { PageHeader } from "@/components/page-header";
 import { type NavItem, NavLinks } from "@/components/site-header";
+import { NameWithBadge } from "@/components/trusted-lender-badge";
 import { Button } from "@/components/ui/button";
 import { matchesPrefix } from "@/lib/route-access";
 import { cn } from "@/lib/utils";
@@ -134,7 +135,14 @@ export function AdminShell({ children }: { children: ReactNode }) {
           <BackToApp />
           <div className="flex items-center gap-3">
             <UserButton />
-            <span className="truncate text-sm">{me?.name}</span>
+            {me ? (
+              <NameWithBadge
+                className="text-sm"
+                isTrustedLender={me.isTrustedLender}
+              >
+                <span className="truncate">{me.name}</span>
+              </NameWithBadge>
+            ) : null}
           </div>
         </div>
       </aside>
