@@ -51,7 +51,7 @@ export function AdminTools() {
                 </TableCell>
                 <TableCell className="text-right">
                   <RemoveToolButton
-                    isOnLoan={tool.availability === "on_loan"}
+                    availability={tool.availability}
                     toolId={tool._id}
                     toolName={tool.name}
                   />

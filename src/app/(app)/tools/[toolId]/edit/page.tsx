@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { Lock } from "lucide-react";
+import { Lock, type LucideIcon, SearchX } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -12,37 +12,45 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/errors";
 import { api } from "../../../../../../convex/_generated/api";
-import type { Id } from "../../../../../../convex/_generated/dataModel";
 
 const BACK = "/my/listings";
 
+function CannotEdit({ icon, title }: { icon: LucideIcon; title: string }) {
+  return (
+    <EmptyState icon={icon} title={title}>
+      <Button asChild variant="outline">
+        <Link href={BACK}>Back to my listings</Link>
+      </Button>
+    </EmptyState>
+  );
+}
+
 export default function EditToolPage() {
   const router = useRouter();
-  const { toolId } = useParams<{ toolId: Id<"tools"> }>();
+  // The URL segment may not be a tool id at all; tools.get answers null then.
+  const { toolId } = useParams<{ toolId: string }>();
   const tool = useQuery(api.tools.get, { toolId });
   const update = useMutation(api.tools.update);
 
+  if (tool === undefined) return <Skeleton className="h-80 max-w-xl" />;
+  // Removed, never existed, or not a tool id: one message for all three.
+  if (tool === null)
+    return <CannotEdit icon={SearchX} title="Listing not found" />;
+  if (!tool.isMine) {
+    return (
+      <CannotEdit icon={Lock} title="You can only edit your own listings" />
+    );
+  }
+
   const handleSubmit = async (values: ToolFormValues) => {
     try {
-      await update({ ...values, toolId });
+      await update({ ...values, toolId: tool._id });
       toast.success("Listing updated");
       router.push(BACK);
     } catch (error) {
       toast.error(errorMessage(error));
     }
   };
-
-  if (tool === undefined) return <Skeleton className="h-80 max-w-xl" />;
-
-  if (!tool.isMine) {
-    return (
-      <EmptyState icon={Lock} title="You can only edit your own listings">
-        <Button asChild variant="outline">
-          <Link href={BACK}>Back to my listings</Link>
-        </Button>
-      </EmptyState>
-    );
-  }
 
   return (
     <>

@@ -24,7 +24,7 @@ import {
   rangesOverlap,
   todayUtc,
 } from "./lib/dates";
-import { cachedGet, getActiveTool } from "./lib/db";
+import { cachedGet, findActiveTool, getActiveTool } from "./lib/db";
 import {
   blockedRange,
   isOverdue,
@@ -401,8 +401,13 @@ export const bookedRanges = query({
   args: { toolId: v.id("tools") },
   handler: async (ctx, { toolId }) => {
     await requireViewer(ctx);
+    const [tool, approved] = await Promise.all([
+      findActiveTool(ctx, toolId),
+      loansForTool(ctx, toolId, "approved"),
+    ]);
+    // A removed tool has nothing to book; an open request dialog shows no dates.
+    if (!tool) return [];
     const today = todayUtc();
-    const approved = await loansForTool(ctx, toolId, "approved");
     return approved
       .map((loan) => blockedRange(loan, today))
       .sort((a, b) => a.startDate.localeCompare(b.startDate));

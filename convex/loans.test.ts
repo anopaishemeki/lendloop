@@ -357,6 +357,14 @@ describe("views", () => {
       await s.other.caller.query(api.loans.bookedRanges, { toolId: s.toolId })
     ).toEqual([{ endDate: day(5), startDate: day(3) }]);
   });
+
+  test("a removed tool has no booked ranges instead of an error", async () => {
+    const s = await setup();
+    await s.owner.caller.mutation(api.tools.remove, { toolId: s.toolId });
+    expect(
+      await s.other.caller.query(api.loans.bookedRanges, { toolId: s.toolId })
+    ).toEqual([]);
+  });
 });
 
 describe("activity", () => {

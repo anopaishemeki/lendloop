@@ -69,7 +69,7 @@ function isRetryableStatus(status: number) {
   return status >= 500 || status === 408 || status === 429;
 }
 
-/** POSTs one signed event to the n8n Cloud production webhook. */
+/** POSTs one signed event to the n8n production webhook. */
 export const deliver = internalAction({
   args: { outboxId: v.id("notificationOutbox") },
   handler: async (ctx, { outboxId }) => {

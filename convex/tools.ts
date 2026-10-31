@@ -15,7 +15,7 @@ import {
   isOnLoan,
 } from "./lib/availability";
 import { todayUtc } from "./lib/dates";
-import { cachedGet, getActiveTool } from "./lib/db";
+import { cachedGet, findActiveTool, getActiveTool } from "./lib/db";
 import { loansForTool, transitionLoan } from "./lib/loans";
 import { cleanText } from "./lib/text";
 import { publicProfile } from "./lib/users";
@@ -147,13 +147,19 @@ export const list = query({
   returns: v.array(toolView),
 });
 
+/**
+ * One live listing, or null when it was removed or the id from the URL isn't a
+ * tool id at all, so pages can say so instead of erroring.
+ */
 export const get = query({
-  args: { toolId: v.id("tools") },
+  args: { toolId: v.string() },
   handler: async (ctx, { toolId }) => {
     const viewer = await requireViewer(ctx);
-    return await viewBuilder(ctx, viewer)(await getActiveTool(ctx, toolId));
+    const id = ctx.db.normalizeId("tools", toolId);
+    const tool = id ? await findActiveTool(ctx, id) : null;
+    return tool ? await viewBuilder(ctx, viewer)(tool) : null;
   },
-  returns: toolView,
+  returns: v.union(toolView, v.null()),
 });
 
 export const listMine = query({

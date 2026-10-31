@@ -120,7 +120,7 @@ Workflow settings:
 **Signature valid?** (If): `{{ $json.valid }}` is true.
 - false → **Respond 401** (Respond to Webhook, JSON, response code 401, `{ "error": "invalid signature" }`).
 
-**Build email** (Code): builds the subject and text for the event from the minimized payload. Output: `{ eventId, from, to, subject, text, html }`.
+**Build email** (Code): builds the subject, plain text and HTML for the event from the minimized payload. Output: `{ eventId, from, to, subject, text, html }`.
 
 **Send email (Resend)** (HTTP Request)
 - POST `https://api.resend.com/emails`

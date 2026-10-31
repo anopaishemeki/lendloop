@@ -4,7 +4,7 @@ A neighborhood tool-lending board. Neighbors list tools they're happy to lend, r
 
 *Borrow what you need. Lend what you don't.*
 
-**Stack:** Next.js 16 (App Router), strict TypeScript, Clerk, Convex, n8n Cloud, Resend (email through n8n).
+**Stack:** Next.js 16 (App Router), strict TypeScript, Clerk, Convex, n8n (Cloud, or self-hosted with the included `docker-compose.yml`), Resend (email through n8n).
 
 ## Contents
 
@@ -43,7 +43,7 @@ A neighborhood tool-lending board. Neighbors list tools they're happy to lend, r
   - **Automation:** every request-notification delivery with its status, attempts and last error, a **Retry failed** button, and the overdue-reminder log.
 
 **Automation**
-- **Request notifications:** every request and status change sends an HMAC-signed event to an n8n Cloud production webhook, and n8n emails the person concerned.
+- **Request notifications:** every request and status change sends an HMAC-signed event to the n8n production webhook, and n8n emails the person concerned. Emails go out as styled HTML with a plain-text version.
 - **Overdue reminders:** a daily n8n schedule fetches overdue loans from a signed Convex endpoint, emails each borrower and writes the outcome back to Convex. The write-back is idempotent.
 - **Error workflow:** surfaces any failed run.
 
@@ -61,7 +61,7 @@ flowchart LR
     WP[Workpool: deliver action<br/>retries + onComplete]
     HTTP[HTTP actions<br/>/n8n/overdue-loans<br/>/n8n/reminders]
   end
-  subgraph n8n Cloud
+  subgraph n8n [n8n Cloud or self-hosted]
     W1[Request notifications<br/>Webhook → verify HMAC → email]
     W2[Overdue reminders<br/>Schedule → fetch → email → write back]
     WE[Error handler]
@@ -302,6 +302,7 @@ There are two roles:
 **Automation**
 - **Outbox plus workpool** instead of calling n8n from the mutation: mutations stay fast and transactional, retries are durable, and every event's delivery state is visible (and shown on loans).
 - **Resend for email,** called from n8n through the HTTP Request node with a Header Auth credential, so the API key never appears in workflow JSON.
+- **Emails are rendered in n8n,** as HTML plus plain text, from the minimized payload, so Convex never sends presentation or extra personal data. The shared layout lives in `n8n/snippets/` (see [`n8n/README.md`](n8n/README.md)).
 - **n8n Variables hold the settings** (with an environment-variable fallback for self-hosted installs). Code nodes can't read credentials, and the HMAC secrets must be available to the Code nodes.
 - **Each direction has its own secret,** so compromising one doesn't let an attacker forge the other direction.
 - **Single-use signatures only on the overdue GET.** That's where a replay would leak data. Write-backs are idempotent, and n8n's Retry On Fail resends identical signatures, so they must stay accepted.
@@ -313,7 +314,7 @@ There are two roles:
 ## Assumptions and what is not verified end to end
 
 **Verified:**
-- by tests (148 total: Convex functions via `convex-test`, HTTP endpoints via `t.fetch`, and the exported n8n Code-node JavaScript run in Node):
+- by tests (Convex functions via `convex-test`, HTTP endpoints via `t.fetch`, and the exported n8n Code-node JavaScript run in Node):
   - RBAC
   - the state machine, overlap and date rules
   - payload minimization
@@ -323,12 +324,13 @@ There are two roles:
   - retry and failure handling
 - the production build, lint and typecheck, in CI.
 
-**Not verified against live services from here:**
-- n8n Cloud executing the imported workflows: that `require('crypto')`, `$vars`, Raw Body and `getBinaryDataBuffer` behave as expected on your plan and version.
-- Resend delivery.
-- A full browser session against Clerk with the `convex` JWT template.
+**Verified against live services** (n8n Cloud 2.45 and self-hosted n8n 1.123, Resend with a verified domain, the Clerk dev instance):
+- request, approve, decline, cancel and return events reach n8n signed, are verified, and arrive as HTML emails; a wrong signature gets 401
+- the daily reminder run fetches the signed overdue list, emails once and writes back once per loan per day
+- failed runs email `OPS_ALERT_EMAIL` through the error workflow
+- the admin portal and its "Admins only" screen in a signed-in browser
 
-The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import) cover these.
+The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import) repeat these on a new instance.
 
 **Assumptions:**
 - **n8n Variables** are a paid-plan feature. The Cloud trial includes them; self-hosted installs without them use environment variables.

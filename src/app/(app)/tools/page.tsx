@@ -8,6 +8,7 @@ import { RequestDialog } from "@/components/loans/request-dialog";
 import { PageHeader } from "@/components/page-header";
 import { CategoryFilter } from "@/components/tools/category-filter";
 import { ListToolButton } from "@/components/tools/list-tool-button";
+import { EditToolLink } from "@/components/tools/own-tool-actions";
 import { ToolGrid } from "@/components/tools/tool-grid";
 import { api } from "../../../../convex/_generated/api";
 import {
@@ -36,7 +37,9 @@ function ToolBrowser() {
       <CategoryFilter onChange={setCategory} value={category} />
       <ToolGrid
         actions={(tool) =>
-          tool.isMine ? null : (
+          tool.isMine ? (
+            <EditToolLink toolId={tool._id} />
+          ) : (
             <RequestDialog
               category={tool.category}
               toolId={tool._id}
@@ -48,7 +51,7 @@ function ToolBrowser() {
         emptyHint="Be the first to lend something in this category."
         emptyIcon={SearchX}
         emptyTitle="Nothing here yet"
-        label="Available tools"
+        label="Neighborhood tools"
         tools={tools}
       />
     </>
@@ -69,7 +72,7 @@ export default function ToolsPage() {
           <ToolGrid
             emptyHint=""
             emptyTitle=""
-            label="Available tools"
+            label="Neighborhood tools"
             tools={undefined}
           />
         }

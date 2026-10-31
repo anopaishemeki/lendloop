@@ -17,13 +17,20 @@ export function cachedGet(ctx: QueryCtx, ...known: Doc<TableNames>[]) {
   };
 }
 
+/** The tool if it exists and hasn't been removed, otherwise null. */
+export async function findActiveTool(
+  ctx: QueryCtx,
+  toolId: Id<"tools">
+): Promise<Doc<"tools"> | null> {
+  const tool = await ctx.db.get(toolId);
+  return tool && tool.removedAt === undefined ? tool : null;
+}
+
 export async function getActiveTool(
   ctx: QueryCtx,
   toolId: Id<"tools">
 ): Promise<Doc<"tools">> {
-  const tool = await ctx.db.get(toolId);
-  if (!tool || tool.removedAt !== undefined) {
-    fail("NOT_FOUND", "That tool is no longer listed.");
-  }
+  const tool = await findActiveTool(ctx, toolId);
+  if (!tool) fail("NOT_FOUND", "That tool is no longer listed.");
   return tool;
 }

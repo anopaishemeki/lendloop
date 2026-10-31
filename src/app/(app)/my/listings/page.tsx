@@ -1,13 +1,11 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { Pencil, Wrench } from "lucide-react";
-import Link from "next/link";
+import { Wrench } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { ListToolButton } from "@/components/tools/list-tool-button";
-import { RemoveToolButton } from "@/components/tools/remove-tool-button";
+import { OwnToolActions } from "@/components/tools/own-tool-actions";
 import { ToolGrid } from "@/components/tools/tool-grid";
-import { Button } from "@/components/ui/button";
 import { api } from "../../../../../convex/_generated/api";
 
 export default function MyListingsPage() {
@@ -22,17 +20,7 @@ export default function MyListingsPage() {
         title="My listings"
       />
       <ToolGrid
-        actions={(tool) => (
-          <>
-            <Button asChild size="sm" variant="outline">
-              <Link href={`/tools/${tool._id}/edit`}>
-                <Pencil aria-hidden />
-                Edit
-              </Link>
-            </Button>
-            <RemoveToolButton toolId={tool._id} toolName={tool.name} />
-          </>
-        )}
+        actions={(tool) => <OwnToolActions tool={tool} />}
         emptyAction={<ListToolButton />}
         emptyHint="A ladder, a tent, a stand mixer: what do you have that sits idle?"
         emptyIcon={Wrench}
