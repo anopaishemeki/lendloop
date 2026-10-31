@@ -1,6 +1,7 @@
 import { Quote } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/logo";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 /** Split layout for sign-in and sign-up: brand panel beside the Clerk form. */
 export function AuthShell({ children }: { children: ReactNode }) {
@@ -23,7 +24,10 @@ export function AuthShell({ children }: { children: ReactNode }) {
           Your contact details are never shown to other neighbors.
         </p>
       </aside>
-      <main className="bg-paper flex flex-col items-center justify-center gap-8 p-6">
+      <main className="bg-paper relative flex flex-col items-center justify-center gap-8 p-6">
+        <div className="absolute top-4 right-4">
+          <ThemeSwitcher />
+        </div>
         <Logo className="lg:hidden" />
         {children}
       </main>

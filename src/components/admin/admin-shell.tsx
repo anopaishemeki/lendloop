@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/empty-state";
 import { Logo } from "@/components/logo";
 import { PageHeader } from "@/components/page-header";
 import { type NavItem, NavLinks } from "@/components/site-header";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import { NameWithBadge } from "@/components/trusted-lender-badge";
 import { Button } from "@/components/ui/button";
 import { matchesPrefix } from "@/lib/route-access";
@@ -134,6 +135,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         <div className="space-y-4 border-t px-2 pt-4">
           <BackToApp />
           <div className="flex items-center gap-3">
+            <ThemeSwitcher />
             <UserButton />
             {me ? (
               <NameWithBadge
@@ -153,6 +155,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <Logo href="/admin" />
             <div className="flex items-center gap-3">
               <BackToApp />
+              <ThemeSwitcher />
               <UserButton />
             </div>
           </div>

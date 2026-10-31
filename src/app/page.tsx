@@ -13,6 +13,7 @@ import { Eyebrow } from "@/components/eyebrow";
 import { Logo } from "@/components/logo";
 import { PublicToolList } from "@/components/public-tool-list";
 import { SiteFooter } from "@/components/site-footer";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Button } from "@/components/ui/button";
 import { CATEGORY_LABELS } from "@/lib/tool-labels";
 import { TOOL_CATEGORIES } from "../../convex/lib/validators";
@@ -107,11 +108,14 @@ export default function HomePage() {
     <div className="flex min-h-svh flex-col">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
         <Logo />
-        <Show when="signed-out">
-          <SignInToBoard>
-            <Button variant="ghost">Sign in</Button>
-          </SignInToBoard>
-        </Show>
+        <div className="flex items-center gap-1">
+          <ThemeSwitcher />
+          <Show when="signed-out">
+            <SignInToBoard>
+              <Button variant="ghost">Sign in</Button>
+            </SignInToBoard>
+          </Show>
+        </div>
       </header>
 
       <main className="flex-1">
