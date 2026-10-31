@@ -21,6 +21,7 @@ import type * as lib_db from "../lib/db.js";
 import type * as lib_env from "../lib/env.js";
 import type * as lib_hmac from "../lib/hmac.js";
 import type * as lib_limits from "../lib/limits.js";
+import type * as lib_listings from "../lib/listings.js";
 import type * as lib_loans from "../lib/loans.js";
 import type * as lib_notifications from "../lib/notifications.js";
 import type * as lib_roles from "../lib/roles.js";
@@ -31,6 +32,7 @@ import type * as loans from "../loans.js";
 import type * as migrations from "../migrations.js";
 import type * as notifications from "../notifications.js";
 import type * as reminders from "../reminders.js";
+import type * as reports from "../reports.js";
 import type * as tools from "../tools.js";
 import type * as users from "../users.js";
 
@@ -54,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   "lib/env": typeof lib_env;
   "lib/hmac": typeof lib_hmac;
   "lib/limits": typeof lib_limits;
+  "lib/listings": typeof lib_listings;
   "lib/loans": typeof lib_loans;
   "lib/notifications": typeof lib_notifications;
   "lib/roles": typeof lib_roles;
@@ -64,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   migrations: typeof migrations;
   notifications: typeof notifications;
   reminders: typeof reminders;
+  reports: typeof reports;
   tools: typeof tools;
   users: typeof users;
 }>;
@@ -102,4 +106,5 @@ export declare const components: {
   toolCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"toolCounts">;
   deliveryCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"deliveryCounts">;
   reminderCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"reminderCounts">;
+  reportCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"reportCounts">;
 };

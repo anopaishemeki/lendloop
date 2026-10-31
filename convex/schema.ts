@@ -7,6 +7,8 @@ import {
   loanStatusValidator,
   notificationEventValidator,
   reminderStatusValidator,
+  reportReasonValidator,
+  reportStatusValidator,
 } from "./lib/validators";
 
 export default defineSchema({
@@ -66,6 +68,20 @@ export default defineSchema({
     .index("by_idempotency_key", ["idempotencyKey"])
     .index("by_loan", ["loanId"])
     .index("by_reminder_date", ["reminderDate"]),
+
+  // A neighbor's report about a listing, open until an admin resolves it.
+  reports: defineTable({
+    details: v.optional(v.string()),
+    reason: reportReasonValidator,
+    reporterId: v.id("users"),
+    resolvedAt: v.optional(v.number()),
+    resolvedBy: v.optional(v.id("users")),
+    status: reportStatusValidator,
+    toolId: v.id("tools"),
+  })
+    .index("by_status", ["status"])
+    .index("by_tool_and_reporter", ["toolId", "reporterId"])
+    .index("by_tool_and_status", ["toolId", "status"]),
 
   tools: defineTable({
     category: categoryValidator,

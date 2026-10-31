@@ -46,6 +46,18 @@ export const NOTIFICATION_EVENTS = [
 ] as const;
 
 export const DELIVERY_STATUSES = ["pending", "sent", "failed"] as const;
+
+/** Why a neighbor reported a listing. */
+export const REPORT_REASONS = [
+  "unsafe",
+  "misleading",
+  "inappropriate",
+  "spam",
+  "other",
+] as const;
+/** Open until an admin removes the listing ("actioned") or dismisses it. */
+export const REPORT_STATUSES = ["open", "actioned", "dismissed"] as const;
+export const REPORT_DETAILS_MAX = 500;
 export const REMINDER_STATUSES = ["sent", "failed"] as const;
 /**
  * The aggregate component instances behind the admin overview counters, shared
@@ -57,6 +69,7 @@ export const COUNTER_COMPONENTS = [
   "toolCounts",
   "deliveryCounts",
   "reminderCounts",
+  "reportCounts",
 ] as const;
 /** Failed deliveries re-queued per redrive (CLI or the admin Retry button). */
 export const REDRIVE_LIMIT = 100;
@@ -68,6 +81,8 @@ export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 export type LoanRole = (typeof LOAN_ROLES)[number];
 export type BoardSection = (typeof BOARD_SECTIONS)[number];
+export type ReportReason = (typeof REPORT_REASONS)[number];
+export type ReportStatus = (typeof REPORT_STATUSES)[number];
 
 function literals<T extends string>(values: readonly [T, T, ...T[]]) {
   const [first, second, ...rest] = values.map((value) => v.literal(value));
@@ -82,3 +97,5 @@ export const boardSectionValidator = literals(BOARD_SECTIONS);
 export const notificationEventValidator = literals(NOTIFICATION_EVENTS);
 export const deliveryStatusValidator = literals(DELIVERY_STATUSES);
 export const reminderStatusValidator = literals(REMINDER_STATUSES);
+export const reportReasonValidator = literals(REPORT_REASONS);
+export const reportStatusValidator = literals(REPORT_STATUSES);

@@ -8,21 +8,16 @@ import { type QueryCtx, query } from "./_generated/server";
 import {
   assertToolOwner,
   assertToolOwnerOrAdmin,
-  fail,
   isSelf,
   requireViewer,
   type Viewer,
 } from "./auth";
 import { mutation } from "./functions";
-import {
-  availabilityOf,
-  availabilityValidator,
-  isOnLoan,
-} from "./lib/availability";
+import { availabilityOf, availabilityValidator } from "./lib/availability";
 import { todayUtc } from "./lib/dates";
 import { cachedGet, findActiveTool, getActiveTool, mapPage } from "./lib/db";
 import { enforceRateLimit } from "./lib/limits";
-import { loansForTool, transitionLoan } from "./lib/loans";
+import { removeListing } from "./lib/listings";
 import { cleanText } from "./lib/text";
 import { publicProfile } from "./lib/users";
 import {
@@ -222,42 +217,14 @@ export const update = mutation({
   returns: v.null(),
 });
 
-/**
- * Soft delete so loan history survives. Open requests are declined and
- * upcoming approved loans cancelled. A tool that is currently out can only be
- * removed by an admin; the loan stays approved so it can still be returned.
- */
+/** Owners remove their own listings; admins any (see removeListing). */
 export const remove = mutation({
   args: { toolId: v.id("tools") },
   handler: async (ctx, { toolId }) => {
     const viewer = await requireViewer(ctx);
     const tool = await getActiveTool(ctx, toolId);
     assertToolOwnerOrAdmin(viewer, tool);
-
-    const today = todayUtc();
-    const now = Date.now();
-    const actorId = viewer.user._id;
-    const [requested, approved] = await Promise.all([
-      loansForTool(ctx, toolId, "requested"),
-      loansForTool(ctx, toolId, "approved"),
-    ]);
-    if (
-      viewer.role !== "admin" &&
-      approved.some((loan) => isOnLoan(loan, today))
-    ) {
-      fail("CONFLICT", "This tool is out on loan. Mark it returned first.");
-    }
-    await Promise.all([
-      ...requested.map((loan) =>
-        transitionLoan(ctx, loan, "declined", { actorId, now })
-      ),
-      ...approved
-        .filter((loan) => !isOnLoan(loan, today))
-        .map((loan) =>
-          transitionLoan(ctx, loan, "cancelled", { actorId, now })
-        ),
-    ]);
-    await ctx.db.patch(toolId, { removedAt: now, removedBy: viewer.user._id });
+    await removeListing(ctx, viewer, tool);
     return null;
   },
   returns: v.null(),
