@@ -24,22 +24,36 @@ async function setup() {
   return { admin, borrower, owner, t, toolId };
 }
 
+type Setup = Awaited<ReturnType<typeof setup>>;
+type Caller = Setup["owner"]["caller"];
+
 describe("admin queries and mutations reject non-admins", () => {
-  test.each([
+  test.each<[string, (c: Caller) => Promise<unknown>]>([
     [
       "listLoans",
-      (c: Awaited<ReturnType<typeof setup>>["owner"]["caller"]) =>
-        c.query(api.admin.listLoans, { paginationOpts: PAGE }),
+      (c) => c.query(api.admin.listLoans, { paginationOpts: PAGE }),
     ],
     [
       "listTools",
-      (c: Awaited<ReturnType<typeof setup>>["owner"]["caller"]) =>
-        c.query(api.admin.listTools, { paginationOpts: PAGE }),
+      (c) => c.query(api.admin.listTools, { paginationOpts: PAGE }),
     ],
     [
       "listUsers",
-      (c: Awaited<ReturnType<typeof setup>>["owner"]["caller"]) =>
-        c.query(api.admin.listUsers, { paginationOpts: PAGE }),
+      (c) => c.query(api.admin.listUsers, { paginationOpts: PAGE }),
+    ],
+    ["overview", (c) => c.query(api.admin.overview, {})],
+    ["automationHealth", (c) => c.query(api.admin.automationHealth, {})],
+    [
+      "listNotifications",
+      (c) => c.query(api.admin.listNotifications, { paginationOpts: PAGE }),
+    ],
+    [
+      "listReminders",
+      (c) => c.query(api.admin.listReminders, { paginationOpts: PAGE }),
+    ],
+    [
+      "retryFailedNotifications",
+      (c) => c.mutation(api.admin.retryFailedNotifications, {}),
     ],
   ])("%s", async (_name, call) => {
     const { owner } = await setup();
@@ -178,5 +192,135 @@ describe("admin pagination", () => {
       status: "requested",
     });
     expect(page.map((loan) => loan._id)).toEqual([newer, older]);
+  });
+});
+
+/** A request for days +1..+2, approved, then moved into the past. */
+async function overdueLoan({ borrower, owner, t, toolId }: Setup) {
+  const loanId = await borrower.caller.mutation(api.loans.request, {
+    endDate: addDays(todayUtc(), 2),
+    startDate: addDays(todayUtc(), 1),
+    toolId,
+  });
+  await owner.caller.mutation(api.loans.approve, { loanId });
+  await t.run((ctx) =>
+    ctx.db.patch(loanId, {
+      endDate: addDays(todayUtc(), -1),
+      startDate: addDays(todayUtc(), -3),
+    })
+  );
+  return loanId;
+}
+
+describe("admin portal", () => {
+  test("the overview counts neighbors, listings, loans and overdue loans", async () => {
+    const s = await setup();
+    await overdueLoan(s);
+    await s.admin.caller.mutation(api.admin.setTrustedLender, {
+      trusted: true,
+      userId: s.owner.userId,
+    });
+
+    expect(await s.admin.caller.query(api.admin.overview, {})).toMatchObject({
+      listings: 1,
+      loans: { approved: 1, requested: 0 },
+      neighbors: 3,
+      overdue: 1,
+      trustedLenders: 1,
+    });
+    // The request and the approval are both waiting for the workpool.
+    expect(
+      await s.admin.caller.query(api.admin.automationHealth, {})
+    ).toMatchObject({ failed: 0, queued: 2, remindersThisWeek: 0 });
+  });
+
+  test("filters loans down to the overdue ones", async () => {
+    const s = await setup();
+    const overdueId = await overdueLoan(s);
+    await s.borrower.caller.mutation(api.loans.request, {
+      endDate: addDays(todayUtc(), 6),
+      startDate: addDays(todayUtc(), 5),
+      toolId: s.toolId,
+    });
+
+    const overdue = await s.admin.caller.query(api.admin.listLoans, {
+      paginationOpts: PAGE,
+      status: "overdue",
+    });
+    expect(overdue.page.map((loan) => [loan._id, loan.isOverdue])).toEqual([
+      [overdueId, true],
+    ]);
+  });
+
+  test("lists failed deliveries and re-queues them, keeping the attempt count", async () => {
+    const { admin, borrower, t, toolId } = await setup();
+    await borrower.caller.mutation(api.loans.request, {
+      endDate: addDays(todayUtc(), 2),
+      startDate: addDays(todayUtc(), 1),
+      toolId,
+    });
+    await t.run(async (ctx) => {
+      const [entry] = await ctx.db.query("notificationOutbox").collect();
+      if (entry) {
+        await ctx.db.patch(entry._id, {
+          attempts: 6,
+          lastError: "HTTP 500",
+          status: "failed",
+        });
+      }
+    });
+
+    const failed = await admin.caller.query(api.admin.listNotifications, {
+      paginationOpts: PAGE,
+      status: "failed",
+    });
+    expect(failed.page).toMatchObject([
+      {
+        attempts: 6,
+        event: "request.created",
+        lastError: "HTTP 500",
+        recipientName: "olive",
+        toolName: "Tent",
+      },
+    ]);
+    expect(
+      await admin.caller.query(api.admin.automationHealth, {})
+    ).toMatchObject({ failed: 1 });
+
+    expect(
+      await admin.caller.mutation(api.admin.retryFailedNotifications, {})
+    ).toBe(1);
+    const [entry] = await t.run((ctx) =>
+      ctx.db.query("notificationOutbox").collect()
+    );
+    expect(entry).toMatchObject({ attempts: 6, status: "pending" });
+    expect(entry?.lastError).toBeUndefined();
+  });
+
+  test("lists reminders with the tool and borrower", async () => {
+    const s = await setup();
+    const loanId = await overdueLoan(s);
+    const today = todayUtc();
+    await s.t.run((ctx) =>
+      ctx.db.insert("reminders", {
+        idempotencyKey: `${loanId}:${today}`,
+        loanId,
+        reminderDate: today,
+        status: "sent",
+        updatedAt: Date.now(),
+      })
+    );
+
+    const reminders = await s.admin.caller.query(api.admin.listReminders, {
+      paginationOpts: PAGE,
+    });
+    expect(reminders.page).toMatchObject([
+      {
+        borrowerName: "ben",
+        reminderDate: today,
+        status: "sent",
+        toolName: "Tent",
+      },
+    ]);
   });
 });
