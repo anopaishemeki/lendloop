@@ -122,7 +122,14 @@ describe("tools.update", () => {
     );
     await alice.caller.mutation(api.tools.update, edit);
     const tool = await alice.caller.query(api.tools.get, { toolId });
-    expect(tool.name).toBe("Hammer drill");
+    expect(tool?.name).toBe("Hammer drill");
+
+    await alice.caller.mutation(api.tools.remove, { toolId });
+    expect(await alice.caller.query(api.tools.get, { toolId })).toBeNull();
+    // Not a tool id at all (a stale or mistyped URL) also answers null.
+    expect(
+      await alice.caller.query(api.tools.get, { toolId: "not-an-id" })
+    ).toBeNull();
   });
 });
 
