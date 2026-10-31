@@ -183,6 +183,15 @@ Follow [`n8n/README.md`](n8n/README.md). It covers:
 
 In Clerk, open your user → **Metadata → Public** and set `{"role": "admin"}`. Then sign out and back in to refresh the token.
 
+### 7. Demo data (optional)
+
+```bash
+npx convex run seed:demo         # 8 neighbors, 16 listings, loans in every state, email and reminder history, 2 reports
+npx convex run seed:removeDemo   # take it out again
+```
+
+Dates are relative to the day you seed. Demo neighbors can't sign in (they have no Clerk account) and their addresses are Resend's test inbox, so reminders and requests to them email nobody real. Seeding writes rows directly, so it sends nothing itself.
+
 ## Environment variables
 
 **Web app, `.env.local`** (template: [`.env.example`](.env.example))
@@ -353,7 +362,7 @@ There are two roles:
 - They sign in as three dedicated Clerk users (lender, borrower, admin), created on first run by `tests/e2e/global-setup.ts`. Their addresses are Resend's test inbox (`delivered+…@resend.dev`), so the emails the run triggers go nowhere real.
 - Locally they reuse the dev server on :3000 (or start one) and read keys from `.env.local`. `E2E_BASE_URL` points them at a deployed app instead; Vercel preview URLs sit behind Vercel's login, so CI serves its own build.
 - Each run uses a fresh, timestamped listing name and removes it at the end, along with any test listing a failed run left behind more than an hour ago (younger ones may belong to another run in progress).
-- CI (the `e2e` job in `.github/workflows/ci.yml`) runs them after the checks pass, on pushes to `main` and on manual runs, one at a time. Not per PR: staging runs whatever Convex functions were last pushed to it, and the test users' rate limits are shared. It needs the `E2E_CLERK_SECRET_KEY` and `E2E_CLERK_PUBLISHABLE_KEY` secrets and the `E2E_CONVEX_URL` variable (skipped until `E2E_CONVEX_URL` is set); with an `E2E_CONVEX_DEPLOY_KEY` secret it first pushes the commit's functions to staging.
+- CI (the `e2e` job in `.github/workflows/ci.yml`) runs them on manual runs only (Actions → CI → Run workflow), after the checks pass, one at a time. Staging is also the live demo's backend, so automatic runs would fill the demo with test loans; `npx convex run seed:removeE2E` clears what a run leaves behind (its loan, emails and report history). It needs the `E2E_CLERK_SECRET_KEY` and `E2E_CLERK_PUBLISHABLE_KEY` secrets and the `E2E_CONVEX_URL` variable (skipped until `E2E_CONVEX_URL` is set); with an `E2E_CONVEX_DEPLOY_KEY` secret it first pushes the commit's functions to staging.
 - The `/admin` redirect check needs the Clerk `metadata` session claim on the instance under test.
 
 **Verified against live services** (n8n Cloud 2.45 and self-hosted n8n 1.123, Resend with a verified domain, the Clerk dev instance):
@@ -410,6 +419,7 @@ convex/
   notifications.ts        outbox delivery to n8n (workpool action + onComplete)
   alerts.ts               batched ops alert emails for failed deliveries and reminders
   reminders.ts http.ts    overdue list, idempotent write-back, signed HTTP endpoints
+  seed.ts                 demo data (seed:demo / seed:removeDemo) and seed:removeE2E
   crons.ts                daily purge of used signatures, 5-minute ops alert run
   lib/                    hmac, loans state machine, availability, dates, validators, rate limits
   *.test.ts               convex-test specs
