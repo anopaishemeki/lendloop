@@ -297,6 +297,7 @@ There are two roles:
 - **Loan dates are UTC calendar days** (`YYYY-MM-DD`). The server allows a start of "yesterday UTC", so people west of UTC can pick their local today in the evening. The date picker uses the viewer's local day.
 - **Overdue is derived, not stored:** an approved loan whose end date has passed. There's no cron flipping statuses, and nothing can go stale.
 - **Approving a request declines other pending requests for overlapping dates**, and those borrowers are notified. Overlaps with approved loans are checked inside the same mutation, which runs as one transaction.
+- **Admin overview counts are maintained, not scanned.** `@convex-dev/aggregate` counters (`convex/lib/counters.ts`) are updated by triggers on every write to loans, users, tools, deliveries and reminders, so the overview reads a handful of counters however large the tables grow. Convex modules import `mutation`/`internalMutation` from `convex/functions.ts`, which wraps writes with those triggers; a lint rule rejects the unwrapped imports. After deploying, `npx convex run migrations:backfillAllCounters` loads rows written before the counters existed; it pages through every table on its own.
 - **Removing a listing is a soft delete,** so loan history survives. Open requests are declined and upcoming loans cancelled. Owners can't remove a tool that is out on loan; admins can, and the loan stays open until it is returned.
 
 **Automation**
@@ -346,7 +347,6 @@ The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import
   - Rotate the two HMAC secrets periodically.
   - To rotate without downtime, accept a list of active secrets during the overlap. Today a single secret is configured per direction.
 - **Scale:**
-  - Keep counters (for example `@convex-dev/aggregate`) for the admin overview. Today it counts up to 1,000 rows per number, and because queries are reactive, writes to the counted tables re-run it; delivery counts are a separate query so retries only re-run that one.
   - Overdue reminders take 200 loans per run; schedule more frequent runs if the backlog grows.
   - Consider a counter table for availability instead of a per-tool index read.
 - **Observability:**

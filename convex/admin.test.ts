@@ -1,5 +1,6 @@
-import { describe, expect, test } from "vitest";
-import { api } from "./_generated/api";
+import { describe, expect, test, vi } from "vitest";
+import { api, internal } from "./_generated/api";
+import { toolCounts, userCounts } from "./lib/counters";
 import { addDays, todayUtc } from "./lib/dates";
 import { identityFor, newTest } from "./test.setup";
 
@@ -309,6 +310,28 @@ describe("admin portal", () => {
     );
     expect(entry).toMatchObject({ attempts: 6, status: "pending" });
     expect(entry?.lastError).toBeUndefined();
+  });
+
+  test("backfillAllCounters restores counts from the tables", async () => {
+    vi.useFakeTimers();
+    const s = await setup();
+    // As if the counters were added after these rows were written.
+    await s.t.run((ctx) => userCounts.clear(ctx));
+    await s.t.run((ctx) => toolCounts.clear(ctx));
+    expect(await s.admin.caller.query(api.admin.overview, {})).toMatchObject({
+      listings: 0,
+      neighbors: 0,
+    });
+
+    // The backfill counts rows created before it starts.
+    vi.advanceTimersByTime(1000);
+    await s.t.mutation(internal.migrations.backfillAllCounters, {});
+    await s.t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect(await s.admin.caller.query(api.admin.overview, {})).toMatchObject({
+      listings: 1,
+      neighbors: 3,
+    });
+    vi.useRealTimers();
   });
 
   test("lists reminders with the tool and borrower", async () => {

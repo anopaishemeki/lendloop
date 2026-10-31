@@ -4,7 +4,7 @@ import {
 } from "convex/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { mutation, type QueryCtx, query } from "./_generated/server";
+import { type QueryCtx, query } from "./_generated/server";
 import {
   assertToolOwner,
   assertToolOwnerOrAdmin,
@@ -13,6 +13,7 @@ import {
   requireViewer,
   type Viewer,
 } from "./auth";
+import { mutation } from "./functions";
 import {
   availabilityOf,
   availabilityValidator,

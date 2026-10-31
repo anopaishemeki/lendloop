@@ -4,12 +4,7 @@ import {
 } from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import {
-  type MutationCtx,
-  mutation,
-  type QueryCtx,
-  query,
-} from "./_generated/server";
+import { type MutationCtx, type QueryCtx, query } from "./_generated/server";
 import {
   assertLoanParty,
   fail,
@@ -18,6 +13,7 @@ import {
   requireViewer,
   type Viewer,
 } from "./auth";
+import { mutation } from "./functions";
 import { activityValidator, loanActivity } from "./lib/activity";
 import { isOnLoan } from "./lib/availability";
 import {

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { query } from "./_generated/server";
 import { getViewer, upsertProfile } from "./auth";
+import { mutation } from "./functions";
 import schema from "./schema";
 
 const meValidator = schema.tables.users.validator
