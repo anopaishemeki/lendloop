@@ -48,8 +48,13 @@ async function drain(t: Setup["t"]) {
   await t.finishAllScheduledFunctions(vi.runAllTimers);
 }
 
+// `day()` reads the clock each time, and draining the workpool fast-forwards
+// the fake clock through retry backoffs. Tests read dates before draining;
+// starting at midday UTC also keeps every run on one calendar day.
+const MIDDAY_UTC = new Date("2026-06-15T12:00:00Z");
+
 beforeEach(() => {
-  vi.useFakeTimers();
+  vi.useFakeTimers({ now: MIDDAY_UTC });
 });
 
 afterEach(() => {
@@ -222,10 +227,12 @@ describe("delivery", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const s = await setup();
+    // Read the dates before draining moves the fake clock on.
+    const sent = { endDate: day(2), startDate: day(1) };
     await request(s);
     await drain(s.t);
     const payload = JSON.parse(fetchMock.mock.calls[0]?.[1].body as string);
-    expect(payload.loan).toEqual({ endDate: day(2), startDate: day(1) });
+    expect(payload.loan).toEqual(sent);
   });
 });
 
