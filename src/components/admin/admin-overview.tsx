@@ -16,7 +16,7 @@ import { loanStatusLabel } from "@/components/loans/loan-status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
-import { COUNT_CAP, LOAN_STATUSES } from "../../../convex/lib/validators";
+import { LOAN_STATUSES } from "../../../convex/lib/validators";
 import { LatestLoans } from "./admin-loans";
 
 type Tone = "default" | "warn" | "bad";
@@ -113,11 +113,6 @@ function Bar({
   );
 }
 
-// Counts stop at COUNT_CAP so the queries stay cheap; show that as "1,000+".
-function count(n: number) {
-  return n > COUNT_CAP ? `${COUNT_CAP.toLocaleString()}+` : n.toLocaleString();
-}
-
 export function AdminOverview() {
   const stats = useQuery(api.admin.overview);
   const health = useQuery(api.admin.automationHealth);
@@ -146,25 +141,25 @@ export function AdminOverview() {
           href="/admin/neighbors"
           icon={Users}
           label="Neighbors"
-          value={count(stats.neighbors)}
+          value={stats.neighbors.toLocaleString()}
         />
         <StatCard
           href="/admin/listings"
           icon={Wrench}
           label="Live listings"
-          value={count(stats.listings)}
+          value={stats.listings.toLocaleString()}
         />
         <StatCard
           href="/admin/loans?status=requested"
           icon={Hourglass}
           label="Requests awaiting a decision"
-          value={count(stats.loans.requested)}
+          value={stats.loans.requested.toLocaleString()}
         />
         <StatCard
           href="/admin/loans?status=approved"
           icon={Repeat}
           label="Approved loans"
-          value={count(stats.loans.approved)}
+          value={stats.loans.approved.toLocaleString()}
         />
         <StatCard
           hint="Approved loans past their end date"
@@ -172,7 +167,7 @@ export function AdminOverview() {
           icon={AlarmClock}
           label="Overdue"
           tone={stats.overdue > 0 ? "warn" : "default"}
-          value={count(stats.overdue)}
+          value={stats.overdue.toLocaleString()}
         />
         <StatCard
           hint={
@@ -182,7 +177,7 @@ export function AdminOverview() {
           icon={failed > 0 ? CircleAlert : BadgeCheck}
           label="Failed notifications"
           tone={failed > 0 ? "bad" : "default"}
-          value={count(failed)}
+          value={failed.toLocaleString()}
         />
       </div>
 
@@ -218,7 +213,7 @@ export function AdminOverview() {
               <div className="bg-muted/60 rounded-xl p-3" key={label}>
                 <dt className="text-muted-foreground">{label}</dt>
                 <dd className="font-display mt-1 text-2xl font-semibold tabular-nums">
-                  {count(value)}
+                  {value.toLocaleString()}
                 </dd>
               </div>
             ))}
