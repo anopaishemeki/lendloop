@@ -342,11 +342,10 @@ The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import
 ## Running in production
 
 - **Convex:** run `npx convex deploy` to a production deployment and set the same env variables with `--prod`. Use a production Clerk instance and keys.
-- **Hosting:** host the app (e.g. on Vercel) with `APP_URL` set to the real domain.
-- **Email:** verify a sending domain in Resend and use it in `RESEND_FROM`.
-- **Secrets:**
-  - Rotate the two HMAC secrets periodically.
-  - To rotate without downtime, accept a list of active secrets during the overlap. Today a single secret is configured per direction.
+- **Hosting:** the app runs on Vercel (production branch `main`, a preview deployment per PR). Point a custom domain at it and update `APP_URL` in Convex to match.
+- **Email:** reminders and notifications already send from a verified Resend domain via `RESEND_FROM`; keep that domain's DNS records in place.
+- **Clerk session token:** add `{"metadata": "{{user.public_metadata}}"}` under Configure → Sessions so the proxy can redirect non-admins away from `/admin` before the page loads.
+- **n8n execution data:** keep saving successful executions off (`saveDataSuccessExecution: none`, as exported) so borrower emails don't pile up in execution history; failed runs are still saved.
 - **Scale:**
   - Consider a counter table for availability instead of a per-tool index read.
 - **Observability:**
