@@ -42,12 +42,13 @@ A neighborhood tool-lending board. Neighbors list tools they're happy to lend, r
   - **Listings:** remove any listing.
   - **Reports:** the report queue (open by default, filterable by status). **Remove** takes the listing down and closes every open report about it (as does removing it from Listings); **Dismiss** closes one report. A lender removing their own listing leaves its reports open, marked "Removed by the lender", so an admin still sees them.
   - **Neighbors:** mark lenders as Trusted Lender.
-  - **Automation:** every request-notification delivery with its status, attempts and last error, a **Retry failed** button, and the overdue-reminder log.
+  - **Automation:** a two-week chart of sent and failed deliveries and reminders per day; every request-notification delivery with its status, attempts and last error, a **Retry failed** button; and the overdue-reminder log.
 
 **Automation**
 - **Request notifications:** every request and status change sends an HMAC-signed event to the n8n production webhook, and n8n emails the person concerned. Emails go out as styled HTML with a plain-text version.
 - **Overdue reminders:** an hourly n8n schedule (08:00-17:00 UTC) fetches overdue loans from a signed Convex endpoint, emails each borrower and writes the outcome back to Convex. The write-back is idempotent.
 - **Error workflow:** surfaces any failed run.
+- **Ops alerts:** failed request notifications and failed overdue reminders are summed up every 5 minutes and emailed to `OPS_ALERT_EMAIL` as one alert, sent by Convex through Resend directly, so it still arrives when n8n is down.
 
 ## Architecture
 
@@ -201,6 +202,7 @@ In Clerk, open your user → **Metadata → Public** and set `{"role": "admin"}`
 | `N8N_REQUEST_WEBHOOK_URL` | Production webhook URL of *Request notifications* |
 | `N8N_OUTBOUND_SECRET` | Signs Convex → n8n requests |
 | `N8N_INBOUND_SECRET` | Verifies n8n → Convex requests and signs the overdue response |
+| `RESEND_API_KEY`, `RESEND_FROM`, `OPS_ALERT_EMAIL` | Ops alerts for failed deliveries and reminders, sent from Convex through Resend (use the same sender and address as n8n). Without them alerts are only logged. |
 
 **n8n:** five settings and one credential, listed with their matching Convex values in [`n8n/README.md`](n8n/README.md#what-you-enter-by-hand).
 
@@ -280,7 +282,7 @@ There are two roles:
 - Delivery runs on `@convex-dev/workpool`: up to 6 attempts with exponential backoff (about 20 minutes).
 - Only 5xx, 408, 429 and network errors are retried.
 - Each attempt is counted in the same transaction that snapshots the payload.
-- Failures are recorded on the outbox row and logged.
+- Failures are recorded on the outbox row, logged, and alerted (see **Ops alerts** below).
 - After fixing an outage, resend failed events with **Retry failed** on `/admin/automation`, or `npx convex run notifications:redriveFailed`. Either re-queues them all, 100 at a time.
 
 **Duplicates**
@@ -289,6 +291,12 @@ There are two roles:
 **n8n**
 - HTTP nodes use Retry On Fail. The exception is the overdue-loans GET, whose signature Convex accepts only once; a failed fetch fails the run, and a re-run is safe.
 - The Resend node routes errors to an error output. The workflow answers 502 (retryable) or 422 (permanent) and then fails the run on purpose, so the **Error handler** emails `OPS_ALERT_EMAIL`. Failures never go unnoticed.
+
+**Ops alerts** (`convex/lib/alerts.ts`, `convex/alerts.ts`)
+- Every delivery that ends `failed` (not a deliberate cancellation) and every reminder that first fails on a given day inserts one `pendingAlerts` row: an insert with no reads, so failures arriving together during an outage never conflict.
+- A cron (`convex/crons.ts`, every 5 minutes) sums up the pending rows into one email and deletes them only once Resend accepts it, so a rejected send is retried on the next run. An outage therefore sends one email per 5 minutes, not one per failure.
+- The alert names the counts and the latest error (no names or addresses) and links to `/admin/automation`. Convex sends it through Resend itself because a failed delivery usually means n8n is down; n8n's own run failures still go out through the Error handler.
+- The Automation page charts the last 14 days of sent and failed deliveries and reminders, read from the maintained counters.
 
 **Write-back idempotency**
 - `recordReminder` is keyed on `loanId:reminderDate`, so there is one row per loan per day.
@@ -308,7 +316,7 @@ There are two roles:
 - **Loan dates are UTC calendar days** (`YYYY-MM-DD`). The server allows a start of "yesterday UTC", so people west of UTC can pick their local today in the evening. The date picker uses the viewer's local day.
 - **Overdue is derived, not stored:** an approved loan whose end date has passed. There's no cron flipping statuses, and nothing can go stale.
 - **Approving a request declines other pending requests for overlapping dates**, and those borrowers are notified. Overlaps with approved loans are checked inside the same mutation, which runs as one transaction.
-- **Admin overview counts are maintained, not scanned.** `@convex-dev/aggregate` counters (`convex/lib/counters.ts`) are updated by triggers on every write to loans, users, tools, deliveries and reminders, so the overview reads a handful of counters however large the tables grow. Convex modules import `mutation`/`internalMutation` from `convex/functions.ts`, which wraps writes with those triggers; a lint rule rejects the unwrapped imports. After deploying, `npx convex run migrations:backfillAllCounters` loads rows written before the counters existed; it pages through every table on its own.
+- **Admin overview counts are maintained, not scanned.** `@convex-dev/aggregate` counters (`convex/lib/counters.ts`) are updated by triggers on every write to loans, users, tools, deliveries, reminders and reports, so the overview reads a handful of counters however large the tables grow. Convex modules import `mutation`/`internalMutation` from `convex/functions.ts`, which wraps writes with those triggers; a lint rule rejects the unwrapped imports. After deploying, `npx convex run migrations:backfillAllCounters` loads rows written before the counters existed; it pages through every table on its own. The reminder counter is keyed by outcome (sent/failed); a deployment from before that change runs `npx convex run migrations:rebuildReminderCounts` once.
 - **Removing a listing is a soft delete,** so loan history survives. Open requests are declined and upcoming loans cancelled. Owners can't remove a tool that is out on loan; admins can, and the loan stays open until it is returned.
 
 **Automation**
@@ -360,8 +368,6 @@ The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import
   - Consider a counter table for availability instead of a per-tool index read.
 - **Observability:**
   - Ship Convex logs to a log service.
-  - Alert on `notificationOutbox` rows with status `failed`, and on Error-handler executions.
-  - Add a small dashboard of delivery and reminder outcomes.
 - **Testing:** add Playwright end-to-end tests with `@clerk/testing` against a staging deployment.
 - **Moving off the n8n Cloud trial:**
   - **Paid n8n Cloud** (check current plans and limits on n8n.io):
@@ -390,8 +396,9 @@ convex/
   schema.ts               tables and indexes
   tools.ts loans.ts reports.ts admin.ts users.ts   public functions
   notifications.ts        outbox delivery to n8n (workpool action + onComplete)
+  alerts.ts               batched ops alert emails for failed deliveries and reminders
   reminders.ts http.ts    overdue list, idempotent write-back, signed HTTP endpoints
-  crons.ts                daily purge of used signatures
+  crons.ts                daily purge of used signatures, 5-minute ops alert run
   lib/                    hmac, loans state machine, availability, dates, validators, rate limits
   *.test.ts               convex-test specs
 n8n/
