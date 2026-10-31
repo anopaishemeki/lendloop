@@ -4,12 +4,11 @@ import { internal } from "./_generated/api";
 import { internalAction, internalMutation } from "./_generated/server";
 import { appUrl as appUrlFromEnv } from "./lib/env";
 import { SIGNATURE_HEADER, signRequest, TIMESTAMP_HEADER } from "./lib/hmac";
-import { scheduleDelivery } from "./lib/notifications";
+import { redriveFailedDeliveries } from "./lib/notifications";
 import { firstName } from "./lib/users";
 import { notificationEventValidator } from "./lib/validators";
 
 const MAX_ERROR_LENGTH = 500;
-const REDRIVE_LIMIT = 100;
 const FETCH_TIMEOUT_MS = 60_000;
 
 /**
@@ -140,24 +139,10 @@ export const onDelivered = internalMutation({
 /**
  * Re-queues failed deliveries once an outage is fixed:
  *   npx convex run notifications:redriveFailed
+ * Admins can do the same from /admin/automation (admin.retryFailedNotifications).
  */
 export const redriveFailed = internalMutation({
   args: {},
-  handler: async (ctx) => {
-    const failed = await ctx.db
-      .query("notificationOutbox")
-      .withIndex("by_status", (q) => q.eq("status", "failed"))
-      .take(REDRIVE_LIMIT);
-    await Promise.all(
-      failed.map(async (entry) => {
-        await ctx.db.patch(entry._id, {
-          lastError: undefined,
-          status: "pending",
-        });
-        await scheduleDelivery(ctx, entry._id);
-      })
-    );
-    return failed.length;
-  },
+  handler: (ctx) => redriveFailedDeliveries(ctx),
   returns: v.number(),
 });

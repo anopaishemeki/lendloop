@@ -38,11 +38,16 @@ export const NOTIFICATION_EVENTS = [
 
 export const DELIVERY_STATUSES = ["pending", "sent", "failed"] as const;
 export const REMINDER_STATUSES = ["sent", "failed"] as const;
+/** Failed deliveries re-queued per redrive (CLI or the admin Retry button). */
+export const REDRIVE_LIMIT = 100;
+/** Admin overview counts stop here (shown as "1,000+"); see README. */
+export const COUNT_CAP = 1000;
 
 export type ToolCategory = (typeof TOOL_CATEGORIES)[number];
 export type ToolCondition = (typeof TOOL_CONDITIONS)[number];
 export type LoanStatus = (typeof LOAN_STATUSES)[number];
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
+export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
 function literals<T extends string>(values: readonly [T, T, ...T[]]) {
   const [first, second, ...rest] = values.map((value) => v.literal(value));

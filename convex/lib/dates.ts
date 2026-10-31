@@ -2,7 +2,7 @@
 // comparison orders them correctly.
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
-const DAY_MS = 86_400_000;
+export const DAY_MS = 86_400_000;
 
 export type DateRange = { startDate: string; endDate: string };
 

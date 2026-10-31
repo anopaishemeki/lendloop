@@ -3,7 +3,7 @@ import type { Doc } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { daysBetween, isIsoDate } from "./lib/dates";
 import { cachedGet } from "./lib/db";
-import { isOverdue } from "./lib/loans";
+import { isOverdue, overdueLoans } from "./lib/loans";
 import { firstName } from "./lib/users";
 import { reminderStatusValidator } from "./lib/validators";
 
@@ -47,12 +47,7 @@ export const listOverdue = internalQuery({
     );
 
     const due: Doc<"loans">[] = [];
-    const overdue = ctx.db
-      .query("loans")
-      .withIndex("by_status_and_end_date", (q) =>
-        q.eq("status", "approved").lt("endDate", today)
-      );
-    for await (const loan of overdue) {
+    for await (const loan of overdueLoans(ctx, today)) {
       if (isOverdue(loan, today) && !sent.has(loan._id)) due.push(loan);
       if (due.length >= OVERDUE_BATCH) break;
     }
