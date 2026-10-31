@@ -1,7 +1,8 @@
 import { NonRetryableError, vOnCompleteArgs } from "@convex-dev/workpool";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalAction, internalMutation } from "./_generated/server";
+import { internalAction } from "./_generated/server";
+import { internalMutation } from "./functions";
 import { appUrl as appUrlFromEnv } from "./lib/env";
 import { SIGNATURE_HEADER, signRequest, TIMESTAMP_HEADER } from "./lib/hmac";
 import { redriveFailedDeliveries } from "./lib/notifications";

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalQuery } from "./_generated/server";
+import { internalMutation } from "./functions";
 import { daysBetween, isIsoDate } from "./lib/dates";
 import { cachedGet } from "./lib/db";
 import { isOverdue, overdueLoans } from "./lib/loans";

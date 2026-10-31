@@ -99,6 +99,5 @@ export default defineSchema({
     name: v.string(),
   })
     .index("by_clerk_id", ["clerkId"])
-    .index("by_name", ["name"])
-    .index("by_trusted_lender", ["isTrustedLender"]),
+    .index("by_name", ["name"]),
 });

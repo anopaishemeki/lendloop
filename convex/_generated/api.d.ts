@@ -11,9 +11,12 @@
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
+import type * as functions from "../functions.js";
 import type * as http from "../http.js";
 import type * as lib_activity from "../lib/activity.js";
 import type * as lib_availability from "../lib/availability.js";
+import type * as lib_counterNames from "../lib/counter-names.js";
+import type * as lib_counters from "../lib/counters.js";
 import type * as lib_dates from "../lib/dates.js";
 import type * as lib_db from "../lib/db.js";
 import type * as lib_env from "../lib/env.js";
@@ -41,9 +44,12 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auth: typeof auth;
   crons: typeof crons;
+  functions: typeof functions;
   http: typeof http;
   "lib/activity": typeof lib_activity;
   "lib/availability": typeof lib_availability;
+  "lib/counter-names": typeof lib_counterNames;
+  "lib/counters": typeof lib_counters;
   "lib/dates": typeof lib_dates;
   "lib/db": typeof lib_db;
   "lib/env": typeof lib_env;
@@ -90,4 +96,9 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   notificationPool: import("@convex-dev/workpool/_generated/component.js").ComponentApi<"notificationPool">;
+  loanCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"loanCounts">;
+  userCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"userCounts">;
+  toolCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"toolCounts">;
+  deliveryCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"deliveryCounts">;
+  reminderCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"reminderCounts">;
 };

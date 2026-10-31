@@ -4,18 +4,24 @@ import {
 } from "convex/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { mutation, type QueryCtx, query } from "./_generated/server";
+import { type QueryCtx, query } from "./_generated/server";
 import { fail, requireAdmin } from "./auth";
+import { mutation } from "./functions";
 import { availabilityOf, availabilityValidator } from "./lib/availability";
+import {
+  deliveryCounts,
+  loanCounts,
+  reminderCounts,
+  toolCounts,
+  userCounts,
+} from "./lib/counters";
 import { addDays, DAY_MS, todayUtc } from "./lib/dates";
 import { cachedGet, mapPage } from "./lib/db";
 import { isOverdue, overdueLoans } from "./lib/loans";
 import { redriveFailedDeliveries } from "./lib/notifications";
 import { isTrustedLender } from "./lib/users";
 import {
-  COUNT_CAP,
   categoryValidator,
-  type DeliveryStatus,
   deliveryStatusValidator,
   LOAN_STATUSES,
   type LoanStatus,
@@ -182,16 +188,8 @@ export const setTrustedLender = mutation({
   returns: v.null(),
 });
 
-/**
- * Overview counts read at most COUNT_CAP rows each, so they stay within
- * Convex's read limits; the UI shows "1,000+". They're reactive, so writes to
- * the counted tables re-run them: production would keep counters (see README).
- */
 const WEEK_DAYS = 7;
-
-function countUpTo(rows: { take: (n: number) => Promise<unknown[]> }) {
-  return rows.take(COUNT_CAP + 1).then((page) => page.length);
-}
+const HOUR_MS = 3_600_000;
 
 const overviewView = v.object({
   listings: v.number(),
@@ -205,39 +203,38 @@ const overviewView = v.object({
   trustedLenders: v.number(),
 });
 
-/** People, listings and loans for the admin overview. */
+/**
+ * People, listings and loans for the admin overview, read from the counters
+ * in convex/lib/counters.ts (maintained on every write), so it costs a few
+ * reads however large the tables grow.
+ */
 export const overview = query({
   args: {},
   handler: async (ctx) => {
     await requireAdmin(ctx);
-    const [neighbors, trustedLenders, listings, overdue, ...loanCounts] =
+    // Three counter calls: users, tools, and every loan figure in one batch.
+    const [[neighbors = 0, trustedLenders = 0], listings, loanTotals] =
       await Promise.all([
-        countUpTo(ctx.db.query("users")),
-        countUpTo(
-          ctx.db
-            .query("users")
-            .withIndex("by_trusted_lender", (q) =>
-              q.eq("isTrustedLender", true)
-            )
-        ),
-        countUpTo(
-          ctx.db
-            .query("tools")
-            .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined))
-        ),
-        countUpTo(overdueLoans(ctx, todayUtc())),
-        ...LOAN_STATUSES.map((status) =>
-          countUpTo(
-            ctx.db
-              .query("loans")
-              .withIndex("by_status", (q) => q.eq("status", status))
-          )
-        ),
+        userCounts.countBatch(ctx, [
+          {},
+          { bounds: { lower: { inclusive: true, key: 1 } } },
+        ]),
+        toolCounts.count(ctx, {
+          bounds: { upper: { inclusive: true, key: 0 } },
+        }),
+        loanCounts.countBatch(ctx, [
+          ...LOAN_STATUSES.map((namespace) => ({ namespace })),
+          {
+            bounds: { upper: { inclusive: false, key: todayUtc() } },
+            namespace: "approved" as const,
+          },
+        ]),
       ]);
+    const overdue = loanTotals[LOAN_STATUSES.length] ?? 0;
     return {
       listings,
       loans: Object.fromEntries(
-        LOAN_STATUSES.map((status, i) => [status, loanCounts[i] ?? 0])
+        LOAN_STATUSES.map((status, i) => [status, loanTotals[i] ?? 0])
       ) as Record<LoanStatus, number>,
       neighbors,
       overdue,
@@ -255,28 +252,31 @@ export const automationHealth = query({
   args: {},
   handler: async (ctx) => {
     await requireAdmin(ctx);
-    const deliveries = (status: DeliveryStatus, since = 0) =>
-      countUpTo(
-        ctx.db
-          .query("notificationOutbox")
-          .withIndex("by_status", (q) =>
-            q.eq("status", status).gte("_creationTime", since)
-          )
-      );
-    const [deliveredThisWeek, queued, failed, remindersThisWeek] =
+    // Rounded to the hour so the bound (and the query's cache) stays stable.
+    const weekAgo =
+      Math.floor((Date.now() - WEEK_DAYS * DAY_MS) / HOUR_MS) * HOUR_MS;
+    const [[deliveredThisWeek, queued, failed], remindersThisWeek] =
       await Promise.all([
-        deliveries("sent", Date.now() - WEEK_DAYS * DAY_MS),
-        deliveries("pending"),
-        deliveries("failed"),
-        countUpTo(
-          ctx.db
-            .query("reminders")
-            .withIndex("by_reminder_date", (q) =>
-              q.gte("reminderDate", addDays(todayUtc(), 1 - WEEK_DAYS))
-            )
-        ),
+        deliveryCounts.countBatch(ctx, [
+          {
+            bounds: { lower: { inclusive: true, key: weekAgo } },
+            namespace: "sent",
+          },
+          { namespace: "pending" },
+          { namespace: "failed" },
+        ]),
+        reminderCounts.count(ctx, {
+          bounds: {
+            lower: { inclusive: true, key: addDays(todayUtc(), 1 - WEEK_DAYS) },
+          },
+        }),
       ]);
-    return { deliveredThisWeek, failed, queued, remindersThisWeek };
+    return {
+      deliveredThisWeek: deliveredThisWeek ?? 0,
+      failed: failed ?? 0,
+      queued: queued ?? 0,
+      remindersThisWeek,
+    };
   },
   returns: v.object({
     deliveredThisWeek: v.number(),
