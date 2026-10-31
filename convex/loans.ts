@@ -25,6 +25,7 @@ import {
   todayUtc,
 } from "./lib/dates";
 import { cachedGet, findActiveTool, getActiveTool, mapPage } from "./lib/db";
+import { enforceRateLimit } from "./lib/limits";
 import {
   blockedRange,
   isOverdue,
@@ -272,6 +273,10 @@ export const request = mutation({
     }
 
     const cleanNote = note ? cleanText(note, "Note", 0, LOAN_NOTE_MAX) : "";
+    await Promise.all([
+      enforceRateLimit(ctx, viewer, "borrowRequest"),
+      enforceRateLimit(ctx, viewer, "ownerRequests", tool.ownerId),
+    ]);
     const loanId = await ctx.db.insert("loans", {
       borrowerId: viewer.user._id,
       endDate,

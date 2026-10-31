@@ -11,7 +11,8 @@ export type ErrorCode =
   | "NOT_FOUND"
   | "INVALID_ARGUMENT"
   | "INVALID_TRANSITION"
-  | "CONFLICT";
+  | "CONFLICT"
+  | "RATE_LIMITED";
 
 export type Viewer = {
   identity: UserIdentity;

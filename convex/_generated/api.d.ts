@@ -20,6 +20,7 @@ import type * as lib_dates from "../lib/dates.js";
 import type * as lib_db from "../lib/db.js";
 import type * as lib_env from "../lib/env.js";
 import type * as lib_hmac from "../lib/hmac.js";
+import type * as lib_limits from "../lib/limits.js";
 import type * as lib_loans from "../lib/loans.js";
 import type * as lib_notifications from "../lib/notifications.js";
 import type * as lib_roles from "../lib/roles.js";
@@ -52,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   "lib/db": typeof lib_db;
   "lib/env": typeof lib_env;
   "lib/hmac": typeof lib_hmac;
+  "lib/limits": typeof lib_limits;
   "lib/loans": typeof lib_loans;
   "lib/notifications": typeof lib_notifications;
   "lib/roles": typeof lib_roles;
@@ -94,6 +96,7 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   notificationPool: import("@convex-dev/workpool/_generated/component.js").ComponentApi<"notificationPool">;
+  rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
   loanCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"loanCounts">;
   userCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"userCounts">;
   toolCounts: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"toolCounts">;
