@@ -7,6 +7,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { CategoryIcon } from "@/components/category-icon";
 import { Eyebrow } from "@/components/eyebrow";
 import { Logo } from "@/components/logo";
@@ -34,16 +35,34 @@ const STEPS = [
   },
 ];
 
+/**
+ * Signing in from the landing page always lands on the board. Clerk would
+ * otherwise return to "/" (the button passes the current page as redirect_url,
+ * which beats the /tools fallback). Sign-ins started from a protected page keep
+ * returning there, so this is forced here only, not app-wide.
+ */
+function SignInToBoard({ children }: { children: ReactNode }) {
+  return (
+    <SignInButton
+      forceRedirectUrl="/tools"
+      mode="redirect"
+      signUpForceRedirectUrl="/tools"
+    >
+      {children}
+    </SignInButton>
+  );
+}
+
 function PrimaryCta() {
   return (
     <>
       <Show when="signed-out">
-        <SignInButton mode="redirect">
+        <SignInToBoard>
           <Button className="h-12 px-6 text-base" size="lg">
             Sign in to lend or borrow
             <ArrowRight aria-hidden />
           </Button>
-        </SignInButton>
+        </SignInToBoard>
       </Show>
       <Show when="signed-in">
         <Button asChild className="h-12 px-6 text-base" size="lg">
@@ -89,9 +108,9 @@ export default function HomePage() {
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
         <Logo />
         <Show when="signed-out">
-          <SignInButton mode="redirect">
+          <SignInToBoard>
             <Button variant="ghost">Sign in</Button>
-          </SignInButton>
+          </SignInToBoard>
         </Show>
       </header>
 
