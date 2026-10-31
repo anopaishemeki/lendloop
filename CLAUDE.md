@@ -25,6 +25,7 @@ npm run typecheck           # next typegen + tsc for app, convex/, and convex te
 npm test                    # all Vitest projects
 npm run test:convex         # convex-test specs only (convex/**/*.test.ts, edge-runtime)
 npm run test:unit           # tests/unit/** (node): route rules + n8n Code-node tests
+npm run test:e2e            # Playwright (tests/e2e) against :3000 or E2E_BASE_URL; staging data
 npx vitest run convex/loans.test.ts        # single file
 npx vitest run convex/loans.test.ts -t "approve"   # single test by name
 npm run check:n8n           # scan n8n/workflows/*.json for secrets and credential IDs
@@ -52,7 +53,8 @@ npx convex run notifications:redriveFailed # resend failed n8n notification even
 
 Convex specs use convex-test through `newTest()` in `convex/test.setup.ts`, which registers the workpool component. Use `t.withIdentity(identityFor("alice", "admin"))` to act as a user; `identityFor` mirrors the Clerk `metadata` claim. The `import.meta.glob("./**/*.*s")` pattern there must not change.
 
+End-to-end specs (`tests/e2e`, Playwright + `@clerk/testing`) sign in as three Clerk users created by `global-setup.ts` and write to the dev (staging) deployment; keep each run self-cleaning (fresh listing name, removed in `afterAll`).
+
 ## Known open items
 
-- The proxy redirects non-admins early only if the Clerk session token is customized with `{"metadata": "{{user.public_metadata}}"}` (Configure → Sessions); the live dev instance doesn't have it yet.
 - Optional: sign a fixed route name instead of the URL pathname for request events, so n8n needn't parse the webhook URL (changes the signing contract on both sides).
