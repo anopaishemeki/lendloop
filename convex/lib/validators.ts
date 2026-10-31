@@ -47,6 +47,17 @@ export const NOTIFICATION_EVENTS = [
 
 export const DELIVERY_STATUSES = ["pending", "sent", "failed"] as const;
 export const REMINDER_STATUSES = ["sent", "failed"] as const;
+/**
+ * The aggregate component instances behind the admin overview counters, shared
+ * by convex.config.ts, convex/lib/counters.ts and the test setup.
+ */
+export const COUNTER_COMPONENTS = [
+  "loanCounts",
+  "userCounts",
+  "toolCounts",
+  "deliveryCounts",
+  "reminderCounts",
+] as const;
 /** Failed deliveries re-queued per redrive (CLI or the admin Retry button). */
 export const REDRIVE_LIMIT = 100;
 

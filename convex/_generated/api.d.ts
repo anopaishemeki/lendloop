@@ -15,7 +15,6 @@ import type * as functions from "../functions.js";
 import type * as http from "../http.js";
 import type * as lib_activity from "../lib/activity.js";
 import type * as lib_availability from "../lib/availability.js";
-import type * as lib_counterNames from "../lib/counter-names.js";
 import type * as lib_counters from "../lib/counters.js";
 import type * as lib_dates from "../lib/dates.js";
 import type * as lib_db from "../lib/db.js";
@@ -48,7 +47,6 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/activity": typeof lib_activity;
   "lib/availability": typeof lib_availability;
-  "lib/counter-names": typeof lib_counterNames;
   "lib/counters": typeof lib_counters;
   "lib/dates": typeof lib_dates;
   "lib/db": typeof lib_db;

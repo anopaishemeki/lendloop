@@ -1,7 +1,7 @@
 import aggregate from "@convex-dev/aggregate/convex.config.js";
 import workpool from "@convex-dev/workpool/convex.config";
 import { defineApp } from "convex/server";
-import { COUNTER_COMPONENTS } from "./lib/counter-names";
+import { COUNTER_COMPONENTS } from "./lib/validators";
 
 const app = defineApp();
 // Outbound n8n deliveries run here with retries, off the user's mutation path.

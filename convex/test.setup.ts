@@ -4,8 +4,8 @@ import workpool from "@convex-dev/workpool/test";
 import type { UserIdentity } from "convex/server";
 import { convexTest } from "convex-test";
 import { withCounters } from "./functions";
-import { COUNTER_COMPONENTS } from "./lib/counter-names";
 import type { Role } from "./lib/roles";
+import { COUNTER_COMPONENTS } from "./lib/validators";
 import schema from "./schema";
 
 // Must stay `./**/*.*s`: convex-test locates the `_generated` folder from the keys.
