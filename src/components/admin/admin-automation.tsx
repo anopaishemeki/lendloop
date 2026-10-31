@@ -4,6 +4,7 @@ import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { formatDistanceToNow } from "date-fns";
 import { RotateCw } from "lucide-react";
 import { useState } from "react";
+import { NameWithBadge } from "@/components/trusted-lender-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -159,7 +160,13 @@ function Notifications() {
                     ) : null}
                   </TableCell>
                   <TableCell>{row.toolName}</TableCell>
-                  <TableCell>{row.recipientName}</TableCell>
+                  <TableCell>
+                    <NameWithBadge
+                      isTrustedLender={row.recipient.isTrustedLender}
+                    >
+                      {row.recipient.name}
+                    </NameWithBadge>
+                  </TableCell>
                   <TableCell>
                     <DeliveryBadge
                       label={deliveryLabel(row.status, row.attempts)}
@@ -216,7 +223,13 @@ function Reminders() {
                     {formatDay(row.reminderDate)}
                   </TableCell>
                   <TableCell className="font-medium">{row.toolName}</TableCell>
-                  <TableCell>{row.borrowerName}</TableCell>
+                  <TableCell>
+                    <NameWithBadge
+                      isTrustedLender={row.borrower.isTrustedLender}
+                    >
+                      {row.borrower.name}
+                    </NameWithBadge>
+                  </TableCell>
                   <TableCell>
                     <DeliveryBadge
                       label={FILTER_LABELS[row.status]}

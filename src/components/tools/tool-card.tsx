@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { CategoryIcon } from "@/components/category-icon";
 import { Neighbor } from "@/components/neighbor";
-import { TrustedLenderBadge } from "@/components/trusted-lender-badge";
+import { NameWithBadge } from "@/components/trusted-lender-badge";
 import { Badge } from "@/components/ui/badge";
 import { CATEGORY_LABELS, CONDITION_LABELS } from "@/lib/tool-labels";
 import { AvailabilityBadge } from "./availability-badge";
@@ -38,10 +38,9 @@ export function ToolCard({
       ) : null}
       <div className="mt-auto pt-4">
         {tool.isMine ? (
-          <span className="inline-flex flex-wrap items-center gap-2">
+          <NameWithBadge isTrustedLender={tool.owner.isTrustedLender}>
             <Badge variant="outline">Your listing</Badge>
-            {tool.owner.isTrustedLender ? <TrustedLenderBadge /> : null}
-          </span>
+          </NameWithBadge>
         ) : (
           <Neighbor
             firstName={tool.owner.firstName}

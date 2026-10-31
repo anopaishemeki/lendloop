@@ -4,6 +4,7 @@ import { usePaginatedQuery } from "convex/react";
 import { CategoryIcon } from "@/components/category-icon";
 import { AvailabilityBadge } from "@/components/tools/availability-badge";
 import { RemoveToolButton } from "@/components/tools/remove-tool-button";
+import { NameWithBadge } from "@/components/trusted-lender-badge";
 import {
   TableBody,
   TableCell,
@@ -45,7 +46,11 @@ export function AdminTools() {
                   </span>
                 </TableCell>
                 <TableCell>{CATEGORY_LABELS[tool.category]}</TableCell>
-                <TableCell>{tool.ownerName}</TableCell>
+                <TableCell>
+                  <NameWithBadge isTrustedLender={tool.owner.isTrustedLender}>
+                    {tool.owner.name}
+                  </NameWithBadge>
+                </TableCell>
                 <TableCell>
                   <AvailabilityBadge availability={tool.availability} />
                 </TableCell>
