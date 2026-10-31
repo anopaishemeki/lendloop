@@ -10,4 +10,12 @@ crons.daily(
   {}
 );
 
+// One alert email per run at most, covering every failure since the last.
+crons.interval(
+  "email ops about failed deliveries and reminders",
+  { minutes: 5 },
+  internal.alerts.sendPendingAlerts,
+  {}
+);
+
 export default crons;

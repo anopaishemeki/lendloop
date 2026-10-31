@@ -6,6 +6,11 @@ export const DAY_MS = 86_400_000;
 
 export type DateRange = { startDate: string; endDate: string };
 
+/** Midnight UTC at the start of an ISO day, in milliseconds. */
+export function dayStartMs(date: string): number {
+  return Date.parse(`${date}T00:00:00Z`);
+}
+
 export function toIsoDate(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
@@ -16,18 +21,16 @@ export function todayUtc(now = Date.now()): string {
 
 export function isIsoDate(value: string): boolean {
   if (!ISO_DATE.test(value)) return false;
-  const parsed = Date.parse(`${value}T00:00:00Z`);
+  const parsed = dayStartMs(value);
   return !Number.isNaN(parsed) && toIsoDate(parsed) === value;
 }
 
 export function addDays(date: string, days: number): string {
-  return toIsoDate(Date.parse(`${date}T00:00:00Z`) + days * DAY_MS);
+  return toIsoDate(dayStartMs(date) + days * DAY_MS);
 }
 
 export function daysBetween(from: string, to: string): number {
-  return Math.round(
-    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS
-  );
+  return Math.round((dayStartMs(to) - dayStartMs(from)) / DAY_MS);
 }
 
 /** Inclusive ranges: a loan ending on the 5th overlaps one starting on the 5th. */

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import { internalMutation } from "./functions";
+import { noteFailure } from "./lib/alerts";
 import { appUrl as appUrlFromEnv } from "./lib/env";
 import { SIGNATURE_HEADER, signRequest, TIMESTAMP_HEADER } from "./lib/hmac";
 import { redriveFailedDeliveries } from "./lib/notifications";
@@ -132,9 +133,12 @@ export const onDelivered = internalMutation({
       result.kind === "failed" ? result.error : "Delivery was cancelled";
     console.error("Notification delivery failed", { error, outboxId });
     await ctx.db.patch(outboxId, {
+      failedAt: Date.now(),
       lastError: error.slice(0, MAX_ERROR_LENGTH),
       status: "failed",
     });
+    // A cancellation was deliberate; only real failures page ops.
+    if (result.kind === "failed") await noteFailure(ctx, "delivery", error);
     return null;
   },
   returns: v.null(),

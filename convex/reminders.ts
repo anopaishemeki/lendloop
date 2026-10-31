@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { internalQuery } from "./_generated/server";
 import { internalMutation } from "./functions";
+import { noteFailure } from "./lib/alerts";
 import { daysBetween, isIsoDate } from "./lib/dates";
 import { cachedGet } from "./lib/db";
 import { overdueLoans } from "./lib/loans";
@@ -127,6 +128,11 @@ export const recordReminder = internalMutation({
       )
       .unique();
 
+    if (existing?.status === "sent") return { result: "duplicate" as const };
+    // Once per loan and day: retries of a reminder that already failed don't re-alert.
+    if (lastError && !existing) {
+      await noteFailure(ctx, "reminder", lastError);
+    }
     if (!existing) {
       await ctx.db.insert("reminders", {
         idempotencyKey,
@@ -138,7 +144,6 @@ export const recordReminder = internalMutation({
       });
       return { result: "created" as const };
     }
-    if (existing.status === "sent") return { result: "duplicate" as const };
     await ctx.db.patch(existing._id, {
       error: lastError,
       status,

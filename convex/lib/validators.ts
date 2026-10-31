@@ -81,6 +81,7 @@ export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 export type LoanRole = (typeof LOAN_ROLES)[number];
 export type BoardSection = (typeof BOARD_SECTIONS)[number];
+export type ReminderStatus = (typeof REMINDER_STATUSES)[number];
 export type ReportReason = (typeof REPORT_REASONS)[number];
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
 

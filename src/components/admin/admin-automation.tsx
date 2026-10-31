@@ -30,6 +30,7 @@ import {
   DELIVERY_STATUSES,
   type DeliveryStatus,
 } from "../../../convex/lib/validators";
+import { AutomationOutcomes } from "./automation-outcomes";
 import { ADMIN_PAGE_SIZE, TableState } from "./table-state";
 
 const ALL = "all";
@@ -254,6 +255,7 @@ function Reminders() {
 export function AdminAutomation() {
   return (
     <div className="space-y-10">
+      <AutomationOutcomes />
       <Notifications />
       <Reminders />
     </div>

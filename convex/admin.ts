@@ -16,7 +16,7 @@ import {
   toolCounts,
   userCounts,
 } from "./lib/counters";
-import { addDays, DAY_MS, todayUtc } from "./lib/dates";
+import { addDays, DAY_MS, dayStartMs, todayUtc } from "./lib/dates";
 import { cachedGet, mapPage } from "./lib/db";
 import { isOverdue, overdueLoans } from "./lib/loans";
 import { redriveFailedDeliveries } from "./lib/notifications";
@@ -28,6 +28,7 @@ import {
   type LoanStatus,
   loanStatusValidator,
   notificationEventValidator,
+  REMINDER_STATUSES,
   reminderStatusValidator,
   reportReasonValidator,
   reportStatusValidator,
@@ -276,17 +277,24 @@ export const automationHealth = query({
           { namespace: "pending" },
           { namespace: "failed" },
         ]),
-        reminderCounts.count(ctx, {
-          bounds: {
-            lower: { inclusive: true, key: addDays(todayUtc(), 1 - WEEK_DAYS) },
-          },
-        }),
+        reminderCounts.countBatch(
+          ctx,
+          REMINDER_STATUSES.map((namespace) => ({
+            bounds: {
+              lower: {
+                inclusive: true,
+                key: addDays(todayUtc(), 1 - WEEK_DAYS),
+              },
+            },
+            namespace,
+          }))
+        ),
       ]);
     return {
       deliveredThisWeek: deliveredThisWeek ?? 0,
       failed: failed ?? 0,
       queued: queued ?? 0,
-      remindersThisWeek,
+      remindersThisWeek: remindersThisWeek.reduce((sum, n) => sum + n, 0),
     };
   },
   returns: v.object({
@@ -294,6 +302,78 @@ export const automationHealth = query({
     failed: v.number(),
     queued: v.number(),
     remindersThisWeek: v.number(),
+  }),
+});
+
+const OUTCOME_DAYS = 14;
+
+const outcomeSeriesView = v.array(
+  v.object({ day: v.string(), failed: v.number(), sent: v.number() })
+);
+
+/** Per-day [sent, failed] count queries against one counter, two per day. */
+function sentAndFailedPerDay<K>(
+  days: string[],
+  bounds: (day: string) => {
+    lower: { inclusive: boolean; key: K };
+    upper: { inclusive: boolean; key: K };
+  }
+) {
+  return days.flatMap((day) =>
+    (["sent", "failed"] as const).map((namespace) => ({
+      bounds: bounds(day),
+      namespace,
+    }))
+  );
+}
+
+/** Pairs a flat [sent, failed, sent, failed, …] result back up by day. */
+function toSeries(days: string[], counts: number[]) {
+  return days.map((day, i) => ({
+    day,
+    failed: counts[2 * i + 1] ?? 0,
+    sent: counts[2 * i] ?? 0,
+  }));
+}
+
+/**
+ * Sent and failed deliveries and reminders per UTC day for the last two
+ * weeks, oldest first, read from the counters in two batched calls.
+ * Deliveries are filed by when they were sent or gave up; reminders by their
+ * reminder day.
+ */
+export const automationOutcomes = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    const today = todayUtc();
+    const days = Array.from({ length: OUTCOME_DAYS }, (_, i) =>
+      addDays(today, i + 1 - OUTCOME_DAYS)
+    );
+    const [deliveries, reminders] = await Promise.all([
+      deliveryCounts.countBatch(
+        ctx,
+        sentAndFailedPerDay(days, (day) => ({
+          lower: { inclusive: true, key: dayStartMs(day) },
+          upper: { inclusive: false, key: dayStartMs(day) + DAY_MS },
+        }))
+      ),
+      reminderCounts.countBatch(
+        ctx,
+        sentAndFailedPerDay(days, (day) => ({
+          lower: { inclusive: true, key: day },
+          upper: { inclusive: true, key: day },
+        }))
+      ),
+    ]);
+    return {
+      deliveries: toSeries(days, deliveries),
+      reminders: toSeries(days, reminders),
+    };
+  },
+  returns: v.object({
+    deliveries: outcomeSeriesView,
+    reminders: outcomeSeriesView,
   }),
 });
 
