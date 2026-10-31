@@ -94,6 +94,10 @@ The JSON is the source of truth. This section is for building the workflows by h
 
 Code nodes use the default **Run Once for All Items** mode unless noted, and their JavaScript is in the export: copy it from the JSON's `jsCode` field. Settings are read only inside Code nodes. HTTP nodes take URLs and sender addresses from the previous node's output (`$json.url`, `$json.from`), so expressions never touch `$vars` or `$env`. "Retry" means the node's **Settings → Retry On Fail** is on, with **Max Tries 3** and **Wait Between Tries 2000 ms**.
 
+**Shared code.** Code nodes can't import files, so code they share lives once in `n8n/snippets/`: `settings.js` (the `setting()`/`required()` helpers every node uses) and `email-layout.js` (the HTML and plain-text email layout). `npm run sync:n8n` copies each one between its `// <snippet:name>` markers in the nodes, and the unit tests fail if a copy is out of date. Edit the snippet, never the copies in the JSON.
+
+**Emails.** Build email, Build reminder and Format alert each send a plain-text and a styled HTML version, so the Resend nodes post both `text` and `html`.
+
 ### 1. LendLoop - Request notifications
 
 Workflow settings:
@@ -116,13 +120,13 @@ Workflow settings:
 **Signature valid?** (If): `{{ $json.valid }}` is true.
 - false → **Respond 401** (Respond to Webhook, JSON, response code 401, `{ "error": "invalid signature" }`).
 
-**Build email** (Code): builds the subject and text for the event from the minimized payload. Output: `{ eventId, from, to, subject, text }`.
+**Build email** (Code): builds the subject and text for the event from the minimized payload. Output: `{ eventId, from, to, subject, text, html }`.
 
 **Send email (Resend)** (HTTP Request)
 - POST `https://api.resend.com/emails`
 - Authentication: Generic Credential Type → Header Auth → `Resend API`
 - Send Headers: `Idempotency-Key` = `{{ 'lendloop-' + $json.eventId }}`
-- Body: JSON, `{{ JSON.stringify({ from: $json.from, to: [$json.to], subject: $json.subject, text: $json.text }) }}`
+- Body: JSON, `{{ JSON.stringify({ from: $json.from, to: [$json.to], subject: $json.subject, text: $json.text, html: $json.html }) }}`
 - Timeout: 10000
 - Retry: on
 - Settings → On Error: Continue (using error output)
@@ -160,7 +164,7 @@ Workflow settings: as above, plus **Timezone: UTC**, because reminder dates are 
 - Convex signs its response with the method `RESPONSE`. This node checks that signature and its freshness, and throws if either is wrong, which fails the run and alerts ops.
 - Outputs one item per overdue loan. When nothing is overdue the run simply ends here.
 
-**Build reminder** (Code, Run Once for Each Item): `{ loanId, reminderDate, idempotencyKey, from, to, subject, text }`.
+**Build reminder** (Code, Run Once for Each Item): `{ loanId, reminderDate, idempotencyKey, from, to, subject, text, html }`.
 
 **Send reminder (Resend)** (HTTP Request)
 - Configured like *Send email* above, with `Idempotency-Key` = `{{ 'lendloop-reminder-' + $json.idempotencyKey }}`

@@ -25,7 +25,8 @@ const payloadValidator = v.object({
   loan: v.object({ endDate: v.string(), startDate: v.string() }),
   occurredAt: v.string(),
   recipient: v.object({ email: v.string(), firstName: v.string() }),
-  toolName: v.string(),
+  // Absent once the listing is gone; n8n words the email around it.
+  toolName: v.optional(v.string()),
 });
 
 export type NotificationPayload = typeof payloadValidator.type;
@@ -59,7 +60,7 @@ export const startAttempt = internalMutation({
         email: recipient.email,
         firstName: firstName(recipient.name),
       },
-      toolName: tool?.name ?? "a tool",
+      toolName: tool?.name,
     };
   },
   returns: v.union(payloadValidator, v.null()),

@@ -1,9 +1,8 @@
 // Fails if an exported n8n workflow carries credential ids or secret-looking
 // values. Run before committing exports: `npm run check:n8n`.
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
-
-const DIR = path.resolve(import.meta.dirname, "../n8n/workflows");
+import { workflowFiles } from "./sync-n8n-snippets.mjs";
 
 const SECRET_PATTERNS = [
   ["Resend API key", /\bre_[A-Za-z0-9_]{16,}/u],
@@ -17,10 +16,11 @@ const SECRET_PATTERNS = [
 ];
 
 const problems = [];
-const files = readdirSync(DIR).filter((file) => file.endsWith(".json"));
+const files = workflowFiles();
 
-for (const file of files) {
-  const text = readFileSync(path.join(DIR, file), "utf8");
+for (const filePath of files) {
+  const file = path.basename(filePath);
+  const text = readFileSync(filePath, "utf8");
   const workflow = JSON.parse(text);
 
   for (const node of workflow.nodes ?? []) {

@@ -383,9 +383,10 @@ convex/
   *.test.ts               convex-test specs
 n8n/
   workflows/*.json        exported workflows (no credentials)
+  snippets/               shared Code-node code (settings, email layout), synced by npm run sync:n8n
   README.md               import guide and node-by-node configuration
 tests/unit/               route rules and n8n Code-node tests
-scripts/check-n8n-exports.mjs
+scripts/check-n8n-exports.mjs, sync-n8n-snippets.mjs
 docker-compose.yml        optional local n8n
 ```
 
@@ -398,4 +399,5 @@ docker-compose.yml        optional local n8n
 | `npm run typecheck` | App, Convex and test tsconfigs |
 | `npm test` | Vitest: Convex specs and unit tests |
 | `npm run check:n8n` | Scan workflow exports for secrets and credential IDs |
+| `npm run sync:n8n` | Copy shared Code-node snippets (`n8n/snippets/`) into the workflow exports |
 | `npm run build` | Production build |
