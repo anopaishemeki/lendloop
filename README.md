@@ -1,6 +1,6 @@
 # LendLoop
 
-A neighborhood tool-lending board. Neighbors list tools they're happy to lend, request to borrow each other's tools for a date range, and get notified by email. n8n handles request notifications and daily overdue reminders.
+A neighborhood tool-lending board. Neighbors list tools they're happy to lend, request to borrow each other's tools for a date range, and get notified by email. n8n handles request notifications and hourly overdue reminders.
 
 *Borrow what you need. Lend what you don't.*
 
@@ -44,7 +44,7 @@ A neighborhood tool-lending board. Neighbors list tools they're happy to lend, r
 
 **Automation**
 - **Request notifications:** every request and status change sends an HMAC-signed event to the n8n production webhook, and n8n emails the person concerned. Emails go out as styled HTML with a plain-text version.
-- **Overdue reminders:** a daily n8n schedule fetches overdue loans from a signed Convex endpoint, emails each borrower and writes the outcome back to Convex. The write-back is idempotent.
+- **Overdue reminders:** an hourly n8n schedule (08:00-17:00 UTC) fetches overdue loans from a signed Convex endpoint, emails each borrower and writes the outcome back to Convex. The write-back is idempotent.
 - **Error workflow:** surfaces any failed run.
 
 ## Architecture
@@ -98,6 +98,7 @@ flowchart LR
    - Convex verifies the signature, rejects replays, and returns a signed list of overdue loans.
    - n8n verifies that response, emails each borrower, then signs a POST of each outcome to `/n8n/reminders`.
    - Convex stores at most one reminder per loan per day.
+   - Each run returns at most 200 loans, oldest due date first, skipping loans already sent a reminder today. Loans not yet tried today come before today's failed sends, so the hourly runs work through a larger backlog (up to 2,000 a day) and retry failures with any room left, while each run's request and email burst stay small.
 
 ## Local setup
 
@@ -327,7 +328,7 @@ There are two roles:
 
 **Verified against live services** (n8n Cloud 2.45 and self-hosted n8n 1.123, Resend with a verified domain, the Clerk dev instance):
 - request, approve, decline, cancel and return events reach n8n signed, are verified, and arrive as HTML emails; a wrong signature gets 401
-- the daily reminder run fetches the signed overdue list, emails once and writes back once per loan per day
+- the reminder run fetches the signed overdue list, emails once and writes back once per loan per day
 - failed runs email `OPS_ALERT_EMAIL` through the error workflow
 - the admin portal and its "Admins only" screen in a signed-in browser
 
@@ -347,7 +348,6 @@ The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import
   - Rotate the two HMAC secrets periodically.
   - To rotate without downtime, accept a list of active secrets during the overlap. Today a single secret is configured per direction.
 - **Scale:**
-  - Overdue reminders take 200 loans per run; schedule more frequent runs if the backlog grows.
   - Consider a counter table for availability instead of a per-tool index read.
 - **Observability:**
   - Ship Convex logs to a log service.
