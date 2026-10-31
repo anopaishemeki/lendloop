@@ -1,9 +1,10 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { usePaginatedQuery } from "convex/react";
 import { SearchX } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { LoadMoreButton } from "@/components/load-more";
 import { RequestDialog } from "@/components/loans/request-dialog";
 import { PageHeader } from "@/components/page-header";
 import { CategoryFilter } from "@/components/tools/category-filter";
@@ -16,6 +17,8 @@ import {
   type ToolCategory,
 } from "../../../../convex/lib/validators";
 
+const TOOLS_PAGE_SIZE = 24;
+
 function parseCategory(value: string | null): ToolCategory | undefined {
   return TOOL_CATEGORIES.find((category) => category === value);
 }
@@ -24,7 +27,11 @@ function ToolBrowser() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const category = parseCategory(searchParams.get("category"));
-  const tools = useQuery(api.tools.list, { category });
+  const tools = usePaginatedQuery(
+    api.tools.list,
+    { category },
+    { initialNumItems: TOOLS_PAGE_SIZE }
+  );
 
   const setCategory = (next: ToolCategory | undefined) => {
     router.replace(next ? `/tools?category=${next}` : "/tools", {
@@ -52,7 +59,12 @@ function ToolBrowser() {
         emptyIcon={SearchX}
         emptyTitle="Nothing here yet"
         label="Neighborhood tools"
-        tools={tools}
+        tools={tools.status === "LoadingFirstPage" ? undefined : tools.results}
+      />
+      <LoadMoreButton
+        className="mx-auto mt-8 flex"
+        pageSize={TOOLS_PAGE_SIZE}
+        query={tools}
       />
     </>
   );

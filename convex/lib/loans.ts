@@ -4,7 +4,11 @@ import { fail } from "../auth";
 import { isOnLoan } from "./availability";
 import type { DateRange } from "./dates";
 import { enqueueNotification } from "./notifications";
-import type { LoanStatus, NotificationEvent } from "./validators";
+import {
+  CLOSED_LOAN_STATUSES,
+  type LoanStatus,
+  type NotificationEvent,
+} from "./validators";
 
 const TRANSITIONS: Record<LoanStatus, readonly LoanStatus[]> = {
   approved: ["returned", "cancelled"],
@@ -87,6 +91,10 @@ function recipientOf(
  * The single place a loan changes status, so every change is validated the
  * same way and emits exactly one notification event.
  */
+export function isClosedStatus(status: LoanStatus) {
+  return (CLOSED_LOAN_STATUSES as readonly LoanStatus[]).includes(status);
+}
+
 export async function transitionLoan(
   ctx: MutationCtx,
   loan: Doc<"loans">,
@@ -99,6 +107,7 @@ export async function transitionLoan(
   await ctx.db.patch(loan._id, {
     status: to,
     ...(to === "returned" ? { returnedAt: now } : { decidedAt: now }),
+    ...(isClosedStatus(to) ? { closedAt: now } : {}),
   });
   const event = EVENTS[to];
   if (event) {

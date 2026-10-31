@@ -176,6 +176,35 @@ describe("tools.remove", () => {
 });
 
 describe("tools.list", () => {
+  type Caller = Awaited<ReturnType<typeof setup>>["bob"]["caller"];
+  const list = (
+    caller: Caller,
+    {
+      category,
+      cursor = null,
+      numItems = 10,
+    }: { category?: "garden"; cursor?: string | null; numItems?: number } = {}
+  ) =>
+    caller.query(api.tools.list, {
+      category,
+      paginationOpts: { cursor, numItems },
+    });
+
+  test("pages newest first", async () => {
+    const { alice, bob } = await setup();
+    for (const name of ["Drill", "Saw", "Ladder"]) {
+      await alice.caller.mutation(api.tools.create, { ...drill, name });
+    }
+    const first = await list(bob.caller, { numItems: 2 });
+    expect(first.page.map((tool) => tool.name)).toEqual(["Ladder", "Saw"]);
+    const rest = await list(bob.caller, {
+      cursor: first.continueCursor,
+      numItems: 2,
+    });
+    expect(rest.page.map((tool) => tool.name)).toEqual(["Drill"]);
+    expect(rest.isDone).toBe(true);
+  });
+
   test("filters by category and shows only the owner's first name", async () => {
     const { alice, bob } = await setup();
     await alice.caller.mutation(api.tools.create, drill);
@@ -184,9 +213,7 @@ describe("tools.list", () => {
       category: "garden",
       name: "Rake",
     });
-    const garden = await bob.caller.query(api.tools.list, {
-      category: "garden",
-    });
+    const { page: garden } = await list(bob.caller, { category: "garden" });
     expect(garden.map((tool) => tool.name)).toEqual(["Rake"]);
     expect(garden[0]).toMatchObject({
       availability: "available",

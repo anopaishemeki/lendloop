@@ -134,7 +134,9 @@ describe("trusted lender", () => {
       trusted: true,
       userId: owner.userId,
     });
-    const [tool] = await borrower.caller.query(api.tools.list, {});
+    const [tool] = (
+      await borrower.caller.query(api.tools.list, { paginationOpts: PAGE })
+    ).page;
     expect(tool?.owner.isTrustedLender).toBe(true);
     const { page: users } = await admin.caller.query(api.admin.listUsers, {
       paginationOpts: PAGE,

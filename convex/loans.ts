@@ -1,3 +1,7 @@
+import {
+  paginationOptsValidator,
+  paginationResultValidator,
+} from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -24,7 +28,7 @@ import {
   rangesOverlap,
   todayUtc,
 } from "./lib/dates";
-import { cachedGet, findActiveTool, getActiveTool } from "./lib/db";
+import { cachedGet, findActiveTool, getActiveTool, mapPage } from "./lib/db";
 import {
   blockedRange,
   isOverdue,
@@ -35,16 +39,16 @@ import { enqueueNotification } from "./lib/notifications";
 import { cleanText } from "./lib/text";
 import { publicProfile } from "./lib/users";
 import {
+  type BoardSection,
+  boardSectionValidator,
   categoryValidator,
   LOAN_MAX_ADVANCE_DAYS,
   LOAN_MAX_DAYS,
   LOAN_NOTE_MAX,
-  type LoanStatus,
+  type LoanRole,
+  loanRoleValidator,
   loanStatusValidator,
 } from "./lib/validators";
-
-const HISTORY_LIMIT = 50;
-const CLOSED_STATUSES = ["returned", "declined", "cancelled"] as const;
 
 const loanView = v.object({
   _creationTime: v.number(),
@@ -60,7 +64,7 @@ const loanView = v.object({
   endDate: v.string(),
   isOverdue: v.boolean(),
   note: v.optional(v.string()),
-  role: v.union(v.literal("owner"), v.literal("borrower")),
+  role: loanRoleValidator,
   startDate: v.string(),
   status: loanStatusValidator,
   tool: v.object({
@@ -69,12 +73,6 @@ const loanView = v.object({
     isRemoved: v.boolean(),
     name: v.string(),
   }),
-});
-
-const loanBoard = v.object({
-  active: v.array(loanView),
-  history: v.array(loanView),
-  pending: v.array(loanView),
 });
 
 export type LoanView = typeof loanView.type;
@@ -189,44 +187,64 @@ async function loadForAction(
 }
 
 /**
- * Open loans are always returned in full so none can drop off the board; only
- * closed history is capped.
+ * One section of a person's loan board. Open sections lead with what is most
+ * urgent, so paging never hides it: requests by soonest start, approved loans
+ * by soonest end (overdue first). History is newest first; it spans the closed
+ * statuses, so it walks the person's loans and keeps the closed ones.
  */
-async function boardFor(ctx: QueryCtx, viewer: Viewer, role: LoanView["role"]) {
-  const userId = viewer.user._id;
-  const byStatus = (status: LoanStatus) =>
-    role === "owner"
-      ? ctx.db
-          .query("loans")
-          .withIndex("by_owner_and_status", (q) =>
-            q.eq("ownerId", userId).eq("status", status)
+function boardQuery(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  role: LoanRole,
+  section: BoardSection
+) {
+  const loans = ctx.db.query("loans");
+  if (section === "history") {
+    // closedAt is set only on closed loans, so "> 0" is exactly the history.
+    return (
+      role === "owner"
+        ? loans.withIndex("by_owner_closed", (q) =>
+            q.eq("ownerId", userId).gt("closedAt", 0)
           )
-          .order("desc")
-      : ctx.db
-          .query("loans")
-          .withIndex("by_borrower_and_status", (q) =>
-            q.eq("borrowerId", userId).eq("status", status)
+        : loans.withIndex("by_borrower_closed", (q) =>
+            q.eq("borrowerId", userId).gt("closedAt", 0)
           )
-          .order("desc");
-  const [pending, active, ...closed] = await Promise.all([
-    byStatus("requested").collect(),
-    byStatus("approved").collect(),
-    ...CLOSED_STATUSES.map((status) => byStatus(status).take(HISTORY_LIMIT)),
-  ]);
-  const history = closed
-    .flat()
-    .sort((a, b) => b._creationTime - a._creationTime)
-    .slice(0, HISTORY_LIMIT);
-
-  const toView = viewBuilder(ctx, viewer);
-  const views = (loans: Doc<"loans">[]) => Promise.all(loans.map(toView));
-  const [pendingViews, activeViews, historyViews] = await Promise.all([
-    views(pending),
-    views(active),
-    views(history),
-  ]);
-  return { active: activeViews, history: historyViews, pending: pendingViews };
+    ).order("desc");
+  }
+  const status = section === "pending" ? "requested" : "approved";
+  if (role === "owner") {
+    return loans.withIndex(
+      section === "pending" ? "by_owner_status_start" : "by_owner_status_end",
+      (q) => q.eq("ownerId", userId).eq("status", status)
+    );
+  }
+  return loans.withIndex(
+    section === "pending"
+      ? "by_borrower_status_start"
+      : "by_borrower_status_end",
+    (q) => q.eq("borrowerId", userId).eq("status", status)
+  );
 }
+
+/** A page of the viewer's loans as lender ("owner") or borrower, by section. */
+export const listBoard = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    role: loanRoleValidator,
+    section: boardSectionValidator,
+  },
+  handler: async (ctx, { paginationOpts, role, section }) => {
+    const viewer = await requireViewer(ctx);
+    const result = await boardQuery(
+      ctx,
+      viewer.user._id,
+      role,
+      section
+    ).paginate(paginationOpts);
+    return await mapPage(result, viewBuilder(ctx, viewer));
+  },
+  returns: paginationResultValidator(loanView),
+});
 
 export const request = mutation({
   args: {
@@ -364,18 +382,6 @@ export const markReturned = mutation({
     return null;
   },
   returns: v.null(),
-});
-
-export const listMyRequests = query({
-  args: {},
-  handler: async (ctx) => boardFor(ctx, await requireViewer(ctx), "borrower"),
-  returns: loanBoard,
-});
-
-export const listIncoming = query({
-  args: {},
-  handler: async (ctx) => boardFor(ctx, await requireViewer(ctx), "owner"),
-  returns: loanBoard,
 });
 
 /**
