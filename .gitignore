@@ -30,3 +30,9 @@ Thumbs.db
 /graft/
 .ignore
 .vercel
+
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
