@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   BadgeCheck,
   ClipboardList,
+  Flag,
   Gauge,
   ShieldOff,
   Workflow,
@@ -39,6 +40,12 @@ const ADMIN_NAV: NavItem[] = [
     icon: Wrench,
     isActive: section("/admin/listings"),
     label: "Listings",
+  },
+  {
+    href: "/admin/reports",
+    icon: Flag,
+    isActive: section("/admin/reports"),
+    label: "Reports",
   },
   {
     href: "/admin/neighbors",

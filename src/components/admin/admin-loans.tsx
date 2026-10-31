@@ -1,19 +1,12 @@
 "use client";
 
 import { usePaginatedQuery } from "convex/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   LoanStatusBadge,
   loanStatusLabel,
 } from "@/components/loans/loan-status-badge";
 import { NameWithBadge } from "@/components/trusted-lender-badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   TableBody,
   TableCell,
@@ -25,6 +18,7 @@ import { formatRange } from "@/lib/dates";
 import { api } from "../../../convex/_generated/api";
 import { LOAN_STATUSES, type LoanStatus } from "../../../convex/lib/validators";
 import { ADMIN_PAGE_SIZE, TableState } from "./table-state";
+import { UrlStatusFilter } from "./url-status-filter";
 
 const ALL = "all";
 const OVERDUE = "overdue";
@@ -37,41 +31,23 @@ function parseFilter(value: string | null): LoanFilter | undefined {
   return LOAN_STATUSES.find((status) => status === value);
 }
 
-/** The status filter lives in the URL, so overview links and reloads agree. */
-function StatusFilter({ value }: { value: LoanFilter | undefined }) {
-  const router = useRouter();
-  return (
-    <Select
-      onValueChange={(next) =>
-        router.replace(
-          next === ALL ? "/admin/loans" : `/admin/loans?status=${next}`,
-          { scroll: false }
-        )
-      }
-      value={value ?? ALL}
-    >
-      <SelectTrigger aria-label="Filter by status" className="w-48">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={ALL}>All statuses</SelectItem>
-        {LOAN_STATUSES.map((s) => (
-          <SelectItem key={s} value={s}>
-            {loanStatusLabel(s)}
-          </SelectItem>
-        ))}
-        <SelectItem value={OVERDUE}>Overdue</SelectItem>
-      </SelectContent>
-    </Select>
-  );
-}
+const FILTER_OPTIONS = [
+  { label: "All statuses", value: ALL },
+  ...LOAN_STATUSES.map((value) => ({ label: loanStatusLabel(value), value })),
+  { label: "Overdue", value: OVERDUE },
+] as const;
 
 /** Every loan, filtered by the URL's ?status (including "overdue"). */
 export function AdminLoans() {
   const status = parseFilter(useSearchParams().get("status"));
   return (
     <div className="space-y-4">
-      <StatusFilter value={status} />
+      <UrlStatusFilter<LoanFilter | typeof ALL>
+        basePath="/admin/loans"
+        defaultValue={ALL}
+        options={FILTER_OPTIONS}
+        value={status ?? ALL}
+      />
       <LoanTable status={status} />
     </div>
   );
