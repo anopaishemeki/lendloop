@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import aggregate from "@convex-dev/aggregate/test";
+import rateLimiter from "@convex-dev/rate-limiter/test";
 import workpool from "@convex-dev/workpool/test";
 import type { UserIdentity } from "convex/server";
 import { convexTest } from "convex-test";
@@ -15,6 +16,7 @@ export const modules = import.meta.glob("./**/*.*s");
 export function newTest() {
   const t = convexTest(schema, modules);
   workpool.register(t, "notificationPool");
+  rateLimiter.register(t);
   for (const name of COUNTER_COMPONENTS) {
     aggregate.register(t, name);
   }
