@@ -4,6 +4,11 @@ import path from "node:path";
 import vm from "node:vm";
 import { describe, expect, test } from "vitest";
 import { signRequest, verifyRequest } from "../../convex/lib/hmac";
+import {
+  applySnippets,
+  snippetBlocks,
+  workflowFiles,
+} from "../../scripts/sync-n8n-snippets.mjs";
 
 type N8nNode = {
   name: string;
@@ -24,6 +29,10 @@ const ALLOWED_BUILTINS = new Set(
 );
 const nodeRequire = createRequire(import.meta.url);
 const SECRET = "shared-outbound-secret";
+const EMAIL_VARS = {
+  OPS_ALERT_EMAIL: "ops@example.test",
+  RESEND_FROM: "LendLoop <hi@lendloop.example>",
+};
 const WEBHOOK_URL =
   "https://example.app.n8n.cloud/webhook/lendloop/request-events";
 
@@ -189,34 +198,155 @@ describe("request notifications: Verify signature node", () => {
 });
 
 describe("request notifications: Build email node", () => {
-  test("writes the email from the minimized payload only", async () => {
-    const payload = {
-      appUrl: "https://lendloop.example/my/incoming",
-      counterpartFirstName: "Ben",
-      event: "request.created",
-      eventId: "evt1",
-      loan: {
-        endDate: "2026-11-03",
-        startDate: "2026-11-01",
-      },
-      occurredAt: "2026-10-30T10:00:00.000Z",
-      recipient: { email: "olive@example.test", firstName: "Olive" },
-      toolName: "Drill",
-    };
+  const base = {
+    appUrl: "https://lendloop.example/my/incoming",
+    counterpartFirstName: "Ben",
+    event: "request.created",
+    eventId: "evt1",
+    loan: { endDate: "2026-11-03", startDate: "2026-11-01" },
+    occurredAt: "2026-10-30T10:00:00.000Z",
+    recipient: { email: "olive@example.test", firstName: "Olive" },
+    toolName: "Drill",
+  };
+  const buildEmail = async (overrides: Record<string, unknown> = {}) => {
+    const payload = { ...base, ...overrides };
     const [email] = await runCode(
       codeOf("lendloop-request-notifications.json", "Build email"),
-      {
-        $input: { first: () => ({ json: { payload } }) },
-        $vars: { RESEND_FROM: "LendLoop <hi@lendloop.example>" },
-      }
+      { $input: { first: () => ({ json: { payload } }) }, $vars: EMAIL_VARS }
     );
-    expect(email?.json).toMatchObject({
+    return email?.json ?? {};
+  };
+
+  test("writes the email from the minimized payload only", async () => {
+    const email = await buildEmail();
+    expect(email).toMatchObject({
       eventId: "evt1",
-      from: "LendLoop <hi@lendloop.example>",
+      from: EMAIL_VARS.RESEND_FROM,
       subject: "Ben would like to borrow your Drill",
       to: "olive@example.test",
     });
-    expect(email?.json.text).toContain(payload.appUrl);
+    expect(email.text).toContain(`Review the request: ${base.appUrl}`);
+    expect(email.html).toContain("Ben would like to borrow your Drill");
+    expect(email.html).toContain("Sun 1 Nov 2026 – Tue 3 Nov 2026");
+    expect(email.html).toContain(`href="${base.appUrl}"`);
+  });
+
+  test("words the email around a listing that is gone", async () => {
+    const email = await buildEmail({
+      event: "request.cancelled",
+      toolName: undefined,
+    });
+    expect(email.html).toContain("The tool loan was cancelled");
+    expect(email.text).toContain(`See your loans: ${base.appUrl}`);
+  });
+
+  test("escapes names that people typed before putting them in HTML", async () => {
+    const email = await buildEmail({
+      appUrl: "javascript:alert(1)",
+      counterpartFirstName: "<img src=x onerror=alert(1)>",
+      event: "request.approved",
+      recipient: { email: "olive@example.test", firstName: "O'Live" },
+      toolName: 'Saw "XL" & co',
+    });
+    const html = String(email.html);
+    expect(html).not.toContain("<img");
+    expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
+    expect(html).toContain("Saw &quot;XL&quot; &amp; co");
+    expect(html).toContain("O&#39;Live");
+    // Only http(s) links become a button.
+    expect(html).not.toContain("javascript:");
+  });
+});
+
+describe("shared Code-node snippets", () => {
+  test("every marked node carries the current snippets (run npm run sync:n8n)", () => {
+    const snippets = snippetBlocks();
+    const nodes = workflowFiles().flatMap(
+      (file) => loadWorkflow(path.basename(file)).nodes
+    );
+    const using = (name: string) =>
+      nodes
+        .filter((node) =>
+          node.parameters.jsCode?.includes(`// <snippet:${name}>`)
+        )
+        .map((node) => node.name)
+        .sort();
+    expect(using("email-layout")).toEqual([
+      "Build email",
+      "Build reminder",
+      "Format alert",
+    ]);
+    expect(using("settings")).toHaveLength(7);
+    for (const node of nodes) {
+      const code = node.parameters.jsCode ?? "";
+      expect(applySnippets(code, snippets), node.name).toBe(code);
+    }
+  });
+});
+
+describe("overdue reminders: Build reminder node", () => {
+  test("writes a text and a styled HTML reminder", async () => {
+    // Run Once for Each Item: the node returns one item, not an array.
+    const email = (await runCode(
+      codeOf("lendloop-overdue-reminders.json", "Build reminder"),
+      {
+        $json: {
+          appUrl: "https://lendloop.example/my/requests",
+          borrower: { email: "ben@example.test", firstName: "Ben" },
+          daysOverdue: 1,
+          dueDate: "2026-10-29",
+          idempotencyKey: "loan1:2026-10-30",
+          loanId: "loan1",
+          ownerFirstName: "Olive",
+          reminderDate: "2026-10-30",
+          toolName: "Ladder",
+        },
+        $vars: EMAIL_VARS,
+      }
+    )) as unknown as { json: Record<string, unknown> };
+    expect(email.json).toMatchObject({
+      idempotencyKey: "loan1:2026-10-30",
+      subject: "Reminder: please return the Ladder",
+      to: "ben@example.test",
+    });
+    expect(email.json.text).toContain("Thu 29 Oct 2026 (1 day ago)");
+    expect(email.json.html).toContain("Time to return the Ladder");
+    expect(email.json.html).toContain("Overdue · 1 day");
+  });
+});
+
+describe("error handler: Format alert node", () => {
+  const alert = (execution: Record<string, unknown>) =>
+    runCode(codeOf("lendloop-error-handler.json", "Format alert"), {
+      $input: {
+        first: () => ({
+          json: { execution, workflow: { name: "LendLoop - Reminders" } },
+        }),
+      },
+      $vars: EMAIL_VARS,
+    });
+
+  test("summarizes the failure and links to the execution", async () => {
+    const [email] = await alert({
+      error: { message: "boom" },
+      lastNodeExecuted: "Fetch overdue loans",
+      mode: "trigger",
+      url: "https://n8n.example/workflow/1/executions/9",
+    });
+    expect(email?.json).toMatchObject({
+      subject: "[LendLoop] LendLoop - Reminders failed",
+      to: "ops@example.test",
+    });
+    expect(email?.json.text).toContain("Failed node: Fetch overdue loans");
+    expect(email?.json.html).toContain(
+      'href="https://n8n.example/workflow/1/executions/9"'
+    );
+  });
+
+  test("leaves the button out when there is no execution URL", async () => {
+    const [email] = await alert({ id: "9" });
+    expect(email?.json.html).not.toContain("href=");
+    expect(email?.json.text).toContain("Execution: 9");
   });
 });
 
