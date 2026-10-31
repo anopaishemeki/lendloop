@@ -33,3 +33,54 @@ jobs:
       - run: npm test
       - run: npm run check:n8n
       - run: npm run build
+
+  # Playwright end-to-end tests against the staging Convex deployment and Clerk
+  # dev instance, with the app built and served on the runner. Only after the
+  # checks pass, on main and on demand (not per PR: staging runs whatever
+  # functions were last pushed to it, and the test users' rate limits are
+  # shared). Needs the E2E_CLERK_SECRET_KEY and E2E_CLERK_PUBLISHABLE_KEY
+  # secrets and the E2E_CONVEX_URL variable; skipped until they're set. With an
+  # E2E_CONVEX_DEPLOY_KEY secret it first pushes this commit's functions.
+  e2e:
+    needs: check
+    if: github.event_name != 'pull_request' && vars.E2E_CONVEX_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: e2e
+      cancel-in-progress: false
+    env:
+      CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+      NEXT_PUBLIC_CONVEX_URL: ${{ vars.E2E_CONVEX_URL }}
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
+      NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /tools
+      NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /tools
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Push this commit's Convex functions to staging
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.E2E_CONVEX_DEPLOY_KEY }}
+        if: env.CONVEX_DEPLOY_KEY != ''
+        run: npx convex dev --once
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

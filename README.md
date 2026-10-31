@@ -343,6 +343,18 @@ There are two roles:
   - idempotent write-back
   - retry and failure handling
 - the production build, lint and typecheck, in CI.
+- end to end in a browser (Playwright with `@clerk/testing`, `tests/e2e/`), against the staging Convex deployment and Clerk dev instance:
+  - the public landing page, and sign-in protection on `/tools`
+  - a lender lists a tool, a borrower requests it, the lender approves
+  - the borrower reports it and is redirected away from `/admin`; an admin dismisses the report
+  - the lender removes the listing, which cancels the loan
+
+**End-to-end tests** (`npm run test:e2e`)
+- They sign in as three dedicated Clerk users (lender, borrower, admin), created on first run by `tests/e2e/global-setup.ts`. Their addresses are Resend's test inbox (`delivered+…@resend.dev`), so the emails the run triggers go nowhere real.
+- Locally they reuse the dev server on :3000 (or start one) and read keys from `.env.local`. `E2E_BASE_URL` points them at a deployed app instead; Vercel preview URLs sit behind Vercel's login, so CI serves its own build.
+- Each run uses a fresh, timestamped listing name and removes it at the end, along with any test listing a failed run left behind more than an hour ago (younger ones may belong to another run in progress).
+- CI (the `e2e` job in `.github/workflows/ci.yml`) runs them after the checks pass, on pushes to `main` and on manual runs, one at a time. Not per PR: staging runs whatever Convex functions were last pushed to it, and the test users' rate limits are shared. It needs the `E2E_CLERK_SECRET_KEY` and `E2E_CLERK_PUBLISHABLE_KEY` secrets and the `E2E_CONVEX_URL` variable (skipped until `E2E_CONVEX_URL` is set); with an `E2E_CONVEX_DEPLOY_KEY` secret it first pushes the commit's functions to staging.
+- The `/admin` redirect check needs the Clerk `metadata` session claim on the instance under test.
 
 **Verified against live services** (n8n Cloud 2.45 and self-hosted n8n 1.123, Resend with a verified domain, the Clerk dev instance):
 - request, approve, decline, cancel and return events reach n8n signed, are verified, and arrive as HTML emails; a wrong signature gets 401
@@ -362,13 +374,13 @@ The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import
 - **Convex:** run `npx convex deploy` to a production deployment and set the same env variables with `--prod`. Use a production Clerk instance and keys.
 - **Hosting:** the app runs on Vercel (production branch `main`, a preview deployment per PR). Point a custom domain at it and update `APP_URL` in Convex to match.
 - **Email:** reminders and notifications already send from a verified Resend domain via `RESEND_FROM`; keep that domain's DNS records in place.
-- **Clerk session token:** add `{"metadata": "{{user.public_metadata}}"}` under Configure → Sessions so the proxy can redirect non-admins away from `/admin` before the page loads.
+- **Clerk session token:** the production Clerk instance needs the same `{"metadata": "{{user.public_metadata}}"}` session claim as the dev one (Configure → Sessions), so the proxy redirects non-admins away from `/admin` before the page loads.
 - **n8n execution data:** keep saving successful executions off (`saveDataSuccessExecution: none`, as exported) so borrower emails don't pile up in execution history; failed runs are still saved.
 - **Scale:**
   - Consider a counter table for availability instead of a per-tool index read.
 - **Observability:**
   - Ship Convex logs to a log service.
-- **Testing:** add Playwright end-to-end tests with `@clerk/testing` against a staging deployment.
+- **Staging:** the end-to-end tests run against the dev Convex deployment, which the live demo also uses. A dedicated staging deployment (its own Convex project and Clerk instance) would keep test data off the live board.
 - **Moving off the n8n Cloud trial:**
   - **Paid n8n Cloud** (check current plans and limits on n8n.io):
     - No ops work: hosting, upgrades, backups and HTTPS webhooks are handled for you.
@@ -406,6 +418,7 @@ n8n/
   snippets/               shared Code-node code (settings, email layout), synced by npm run sync:n8n
   README.md               import guide and node-by-node configuration
 tests/unit/               route rules and n8n Code-node tests
+tests/e2e/                Playwright end-to-end specs (lending flow, reports, public page)
 scripts/check-n8n-exports.mjs, sync-n8n-snippets.mjs
 docker-compose.yml        optional local n8n
 ```
@@ -418,6 +431,7 @@ docker-compose.yml        optional local n8n
 | `npm run lint` / `npm run lint:fix` | Biome (ultracite) |
 | `npm run typecheck` | App, Convex and test tsconfigs |
 | `npm test` | Vitest: Convex specs and unit tests |
+| `npm run test:e2e` | Playwright end-to-end tests (see **End-to-end tests**) |
 | `npm run check:n8n` | Scan workflow exports for secrets and credential IDs |
 | `npm run sync:n8n` | Copy shared Code-node snippets (`n8n/snippets/`) into the workflow exports |
 | `npm run build` | Production build |
