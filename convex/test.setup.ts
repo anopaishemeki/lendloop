@@ -1,7 +1,10 @@
 /// <reference types="vite/client" />
+import aggregate from "@convex-dev/aggregate/test";
 import workpool from "@convex-dev/workpool/test";
 import type { UserIdentity } from "convex/server";
 import { convexTest } from "convex-test";
+import { withCounters } from "./functions";
+import { COUNTER_COMPONENTS } from "./lib/counter-names";
 import type { Role } from "./lib/roles";
 import schema from "./schema";
 
@@ -12,6 +15,12 @@ export const modules = import.meta.glob("./**/*.*s");
 export function newTest() {
   const t = convexTest(schema, modules);
   workpool.register(t, "notificationPool");
+  for (const name of COUNTER_COMPONENTS) {
+    aggregate.register(t, name);
+  }
+  // Test writes through t.run update the counters too, like real mutations.
+  const run = t.run.bind(t);
+  t.run = (fn) => run((ctx) => fn(withCounters(ctx)));
   return t;
 }
 
