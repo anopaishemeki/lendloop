@@ -26,7 +26,8 @@ const overdueLoanValidator = v.object({
   idempotencyKey: v.string(),
   loanId: v.id("loans"),
   ownerFirstName: v.string(),
-  toolName: v.string(),
+  // Absent once the listing is gone; n8n words the email around it.
+  toolName: v.optional(v.string()),
 });
 
 /**
@@ -75,7 +76,7 @@ export const listOverdue = internalQuery({
           idempotencyKey: reminderKey(loan._id, today),
           loanId: loan._id,
           ownerFirstName: owner ? firstName(owner.name) : "the owner",
-          toolName: tool?.name ?? "the tool",
+          toolName: tool?.name,
         };
       })
     );
