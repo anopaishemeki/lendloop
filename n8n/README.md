@@ -5,7 +5,7 @@ Three workflows live in [`workflows/`](workflows). They are exported without cre
 | File | Workflow | Trigger |
 |---|---|---|
 | `lendloop-request-notifications.json` | LendLoop - Request notifications | Webhook from Convex on every request and status change |
-| `lendloop-overdue-reminders.json` | LendLoop - Overdue reminders | Schedule, daily 08:00 UTC |
+| `lendloop-overdue-reminders.json` | LendLoop - Overdue reminders | Schedule, hourly 08:00-17:00 UTC |
 | `lendloop-error-handler.json` | LendLoop - Error handler | Error Trigger, set as the error workflow of the other two |
 
 The workflows are instance-agnostic. Moving between n8n Cloud, another Cloud workspace or a self-hosted instance changes only:
@@ -149,7 +149,7 @@ Convex retries 5xx, 408 and 429 responses (and network errors), for up to 6 atte
 
 Workflow settings: as above, plus **Timezone: UTC**, because reminder dates are UTC days.
 
-**Every day at 08:00 UTC** (Schedule Trigger): Days, hour 8.
+**Hourly 08:00-17:00 UTC** (Schedule Trigger): Custom (Cron), `0 8-17 * * *`. Each run takes the next 200 overdue loans not yet sent a reminder today, loans not yet tried today first, so ten runs a day work through a backlog of up to 2,000 and retry failed sends with any room left.
 
 **Sign request** (Code): signs `"<ts>.GET./n8n/overdue-loans."` with `LENDLOOP_INBOUND_SECRET`. Output: `{ url, timestamp, signature }`.
 

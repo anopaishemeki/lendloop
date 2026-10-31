@@ -4,11 +4,14 @@ import { internalQuery } from "./_generated/server";
 import { internalMutation } from "./functions";
 import { daysBetween, isIsoDate } from "./lib/dates";
 import { cachedGet } from "./lib/db";
-import { isOverdue, overdueLoans } from "./lib/loans";
+import { overdueLoans } from "./lib/loans";
 import { firstName, isTrustedLender } from "./lib/users";
 import { reminderStatusValidator } from "./lib/validators";
 
-const OVERDUE_BATCH = 200;
+/** Loans per reminder run; hourly runs work through a larger backlog. */
+export const OVERDUE_BATCH = 200;
+/** Overdue loans one run reads at most, well inside Convex's read limits. */
+const MAX_SCANNED = 4000;
 const MAX_ERROR_LENGTH = 500;
 
 export function reminderKey(loanId: string, reminderDate: string) {
@@ -33,9 +36,12 @@ const overdueLoanValidator = v.object({
 });
 
 /**
- * Overdue loans still owed a reminder today, oldest due date first. Loans
- * already reminded today are skipped before the batch limit applies, so a
- * backlog larger than one batch is worked through by re-running the workflow.
+ * The next batch of overdue loans owed a reminder today, oldest due date
+ * first. Loans already sent one today are skipped, and loans not yet tried
+ * today come before today's failed sends, so loans that keep failing can't
+ * crowd out the rest: each hourly run works further through a backlog and
+ * retries failures only with room to spare. Borrowers without an email are
+ * skipped before they take a slot.
  */
 export const listOverdue = internalQuery({
   args: { today: v.string() },
@@ -44,25 +50,35 @@ export const listOverdue = internalQuery({
       .query("reminders")
       .withIndex("by_reminder_date", (q) => q.eq("reminderDate", today))
       .collect();
-    const sent = new Set(
-      remindedToday.filter((r) => r.status === "sent").map((r) => r.loanId)
-    );
-
-    const due: Doc<"loans">[] = [];
-    for await (const loan of overdueLoans(ctx, today)) {
-      if (isOverdue(loan, today) && !sent.has(loan._id)) due.push(loan);
-      if (due.length >= OVERDUE_BATCH) break;
-    }
+    const statusToday = new Map(remindedToday.map((r) => [r.loanId, r.status]));
 
     const get = cachedGet(ctx);
-    const rows = await Promise.all(
-      due.map(async (loan) => {
-        const [borrower, owner, tool] = await Promise.all([
-          get(loan.borrowerId),
+    type Due = { loan: Doc<"loans">; borrower: Doc<"users"> };
+    const untried: Due[] = [];
+    const failed: Due[] = [];
+    let scanned = 0;
+    for await (const loan of overdueLoans(ctx, today)) {
+      const status = statusToday.get(loan._id);
+      const queue = status === "failed" ? failed : untried;
+      if (status !== "sent" && queue.length < OVERDUE_BATCH) {
+        const borrower = await get(loan.borrowerId);
+        if (borrower?.email) queue.push({ borrower, loan });
+      }
+      scanned += 1;
+      if (untried.length >= OVERDUE_BATCH) break;
+      if (scanned >= MAX_SCANNED) {
+        console.warn("Overdue scan cap reached; later loans wait", { today });
+        break;
+      }
+    }
+    const due = [...untried, ...failed].slice(0, OVERDUE_BATCH);
+
+    return await Promise.all(
+      due.map(async ({ borrower, loan }) => {
+        const [owner, tool] = await Promise.all([
           get(loan.ownerId),
           get(loan.toolId),
         ]);
-        if (!borrower?.email) return null;
         return {
           borrower: {
             email: borrower.email,
@@ -78,7 +94,6 @@ export const listOverdue = internalQuery({
         };
       })
     );
-    return rows.filter((row) => row !== null);
   },
   returns: v.array(overdueLoanValidator),
 });

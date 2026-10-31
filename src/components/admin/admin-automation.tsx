@@ -202,7 +202,7 @@ function Reminders() {
           Overdue reminders
         </h2>
         <p className="text-muted-foreground text-sm">
-          Written back by the daily n8n run, at most one per loan per day.
+          Written back by the hourly n8n runs, at most one per loan per day.
         </p>
       </div>
       <TableState empty="No reminders have been sent yet." query={rows}>

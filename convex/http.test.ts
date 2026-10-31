@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { addDays, todayUtc } from "./lib/dates";
 import { signRequest, verifyRequest } from "./lib/hmac";
+import { OVERDUE_BATCH } from "./reminders";
 import { identityFor, newTest } from "./test.setup";
 
 const SECRET = "inbound-secret";
@@ -34,17 +36,30 @@ async function setup() {
       description: "",
       name: "Drill",
     });
-  const loan = (fields: {
+  type LoanFields = {
+    borrowerId?: Id<"users">;
     startDate: string;
     endDate: string;
     status: "approved" | "returned";
-  }) =>
-    t.run((ctx) =>
-      ctx.db.insert("loans", { borrowerId, ownerId, toolId, ...fields })
+  };
+  const insertLoan = (ctx: MutationCtx, fields: LoanFields) =>
+    ctx.db.insert("loans", { borrowerId, ownerId, toolId, ...fields });
+  const loan = (fields: LoanFields) => t.run((ctx) => insertLoan(ctx, fields));
+  const loans = (all: LoanFields[]) =>
+    t.run((ctx) => Promise.all(all.map((fields) => insertLoan(ctx, fields))));
+  const overdueLoan = (endDate = day(-2)) =>
+    loan({ endDate, startDate: day(-5), status: "approved" });
+  /** A full batch of overdue loans, due before any other test loan. */
+  const oldestBatch = (borrower = borrowerId) =>
+    loans(
+      Array.from({ length: OVERDUE_BATCH }, () => ({
+        borrowerId: borrower,
+        endDate: day(-3),
+        startDate: day(-5),
+        status: "approved" as const,
+      }))
     );
-  const overdueLoan = () =>
-    loan({ endDate: day(-2), startDate: day(-5), status: "approved" });
-  return { loan, overdueLoan, t };
+  return { loan, oldestBatch, overdueLoan, t };
 }
 
 type T = Awaited<ReturnType<typeof setup>>["t"];
@@ -102,6 +117,15 @@ function reminderRows(t: T) {
   return t.run((ctx) => ctx.db.query("reminders").collect());
 }
 
+/** One reminder run's loan ids; each run signs afresh, as n8n's runs do. */
+async function overdueRun(t: T, nowMs = Date.now()): Promise<string[]> {
+  const response = await signedFetch(t, "GET", "/n8n/overdue-loans", "", {
+    nowMs,
+  });
+  const { loans } = await response.json();
+  return loans.map((l: { loanId: string }) => l.loanId);
+}
+
 describe("GET /n8n/overdue-loans", () => {
   test("returns only overdue approved loans, minimized and signed", async () => {
     const { loan, overdueLoan, t } = await setup();
@@ -149,9 +173,69 @@ describe("GET /n8n/overdue-loans", () => {
     await writeBack(t, outcome(reminded, "sent"));
     await writeBack(t, outcome(failed, "failed", "Resend 503"));
 
-    const response = await signedFetch(t, "GET", "/n8n/overdue-loans");
-    const { loans } = await response.json();
-    expect(loans.map((l: { loanId: string }) => l.loanId)).toEqual([failed]);
+    expect(await overdueRun(t)).toEqual([failed]);
+  });
+
+  describe("a backlog larger than one run", () => {
+    // The write-back mutation directly: signing 200 POSTs adds nothing here.
+    function markReminded(
+      t: T,
+      loanIds: Id<"loans">[],
+      status: "sent" | "failed"
+    ) {
+      return Promise.all(
+        loanIds.map((loanId) =>
+          t.mutation(internal.reminders.recordReminder, {
+            loanId,
+            reminderDate: today,
+            status,
+          })
+        )
+      );
+    }
+
+    test("is worked through oldest first by later runs", async () => {
+      const { oldestBatch, overdueLoan, t } = await setup();
+      const oldest = await oldestBatch();
+      const newer = await overdueLoan(day(-1));
+
+      const first = await overdueRun(t);
+      expect(first).toHaveLength(OVERDUE_BATCH);
+      expect(new Set(first)).toEqual(new Set(oldest));
+
+      await markReminded(t, oldest, "sent");
+      expect(await overdueRun(t, Date.now() + 1000)).toEqual([newer]);
+    });
+
+    test("puts loans not yet tried today before failed sends", async () => {
+      const { oldestBatch, overdueLoan, t } = await setup();
+      const oldest = await oldestBatch();
+      const newer = await overdueLoan(day(-1));
+      await markReminded(t, oldest, "failed");
+
+      const retry = await overdueRun(t);
+      expect(retry).toHaveLength(OVERDUE_BATCH);
+      expect(retry[0]).toBe(newer);
+      expect(new Set(retry.slice(1))).toEqual(
+        new Set(oldest.slice(0, OVERDUE_BATCH - 1))
+      );
+    });
+
+    test("skips borrowers without an email before filling the batch", async () => {
+      const { oldestBatch, overdueLoan, t } = await setup();
+      const noEmail = await t.run((ctx) =>
+        ctx.db.insert("users", {
+          clerkId: "no-email",
+          email: "",
+          isTrustedLender: false,
+          name: "No Email",
+        })
+      );
+      await oldestBatch(noEmail);
+      const newer = await overdueLoan(day(-1));
+
+      expect(await overdueRun(t)).toEqual([newer]);
+    });
   });
 
   test.each([
