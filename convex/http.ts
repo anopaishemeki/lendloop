@@ -11,7 +11,7 @@ import {
   verifyRequest,
 } from "./lib/hmac";
 
-// Endpoints called by n8n Cloud. There is no user identity here: a fresh,
+// Endpoints called by n8n. There is no user identity here: a fresh,
 // unused HMAC made with N8N_INBOUND_SECRET is the only authorization.
 
 const OVERDUE_PATH = "/n8n/overdue-loans";
