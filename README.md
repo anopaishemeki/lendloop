@@ -264,6 +264,13 @@ There are two roles:
 - Free text is trimmed, length-limited and stripped of control characters.
 - Dates must be real calendar days, `start ≤ end`, no more than 30 days long and no more than 180 days ahead.
 
+**Rate limits** (`convex/lib/limits.ts`, `@convex-dev/rate-limiter`)
+- Token buckets (a burst, then a steady refill), checked after validation so people see the real error first:
+  - borrow requests per borrower: burst 10, refilling at 20 an hour;
+  - requests received per owner, across all borrowers, so one inbox can't be flooded: burst 30, refilling at 30 an hour;
+  - new listings per lister: burst 10, refilling at 20 a day.
+- A refused call fails with `RATE_LIMITED` and says how many minutes to wait. It uses no token, and a call that fails for another reason gives its token back (the mutation rolls back). Admins are exempt.
+
 ## Reliability and error handling
 
 **Convex → n8n**
@@ -353,7 +360,6 @@ The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import
   - Alert on `notificationOutbox` rows with status `failed`, and on Error-handler executions.
   - Add a small dashboard of delivery and reminder outcomes.
 - **Abuse controls:**
-  - Rate-limit requests per user (e.g. with `@convex-dev/rate-limiter`).
   - Add a report-listing flow for admins.
 - **Testing:** add Playwright end-to-end tests with `@clerk/testing` against a staging deployment.
 - **Moving off the n8n Cloud trial:**
@@ -385,7 +391,7 @@ convex/
   notifications.ts        outbox delivery to n8n (workpool action + onComplete)
   reminders.ts http.ts    overdue list, idempotent write-back, signed HTTP endpoints
   crons.ts                daily purge of used signatures
-  lib/                    hmac, loans state machine, availability, dates, validators
+  lib/                    hmac, loans state machine, availability, dates, validators, rate limits
   *.test.ts               convex-test specs
 n8n/
   workflows/*.json        exported workflows (no credentials)
