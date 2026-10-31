@@ -21,6 +21,8 @@ const SERIF = "Fraunces, Georgia, 'Times New Roman', serif";
 const SANS = "-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif";
 const HTTP_URL = /^https?:\/\//iu;
 
+const TRUSTED_LABEL = "Trusted lender";
+
 function escapeHtml(value) {
   const entities = {
     "'": "&#39;",
@@ -48,16 +50,27 @@ function formatDay(isoDay) {
 }
 
 /** The plain-text twin of renderEmail, from the same paragraphs and button. */
-function renderText({ paragraphs, cta }) {
+function renderText({ paragraphs, details = [], cta }) {
+  // A trusted person (a details row flagged true) gets one plain sentence.
+  const trusted = details
+    .filter(([, , isTrusted]) => isTrusted)
+    .map(([, name]) => `${name} is a Trusted Lender on LendLoop.`);
   const link = cta?.url ? [`${cta.label}: ${cta.url}`] : [];
-  return [...paragraphs, ...link, "- LendLoop"].join("\n\n");
+  return [...paragraphs, ...trusted, ...link, "- LendLoop"].join("\n\n");
+}
+
+/** A rounded label in one of EMAIL_TONES; `style` sets its size. */
+function pill(label, tone, style) {
+  const [background, color] = EMAIL_TONES[tone];
+  return `<span style="display:inline-block;border-radius:999px;background:${background};color:${color};${style}">${escapeHtml(label)}</span>`;
 }
 
 /**
  * Renders a branded, table-based email (inline styles only, so it holds up in
  * Gmail and Outlook). Every value is escaped; links must be http(s).
  * badge: { label, tone: 'good' | 'warn' | 'bad' | 'info' }
- * details: [[label, value], ...]; cta: { label, url } (optional)
+ * details: [[label, value, isTrusted?], ...]; a trusted row gets a green
+ * "Trusted lender" pill after the value; cta: { label, url } (optional)
  */
 function renderEmail({
   preheader,
@@ -69,10 +82,13 @@ function renderEmail({
   footnote,
 }) {
   const c = EMAIL_COLORS;
-  const [badgeBg, badgeText] = EMAIL_TONES[badge.tone];
   const safeUrl = HTTP_URL.test(cta?.url || "") ? cta.url : null;
 
-  const badgeHtml = `<div style="display:inline-block;padding:4px 10px;border-radius:999px;background:${badgeBg};color:${badgeText};font:600 12px/1.4 ${SANS};letter-spacing:.04em;text-transform:uppercase;">${escapeHtml(badge.label)}</div>`;
+  const badgeHtml = pill(
+    badge.label,
+    badge.tone,
+    `padding:4px 10px;font:600 12px/1.4 ${SANS};letter-spacing:.04em;text-transform:uppercase;`
+  );
   const body = paragraphs
     .map(
       (text) =>
@@ -80,11 +96,14 @@ function renderEmail({
     )
     .join("");
   const rows = details
-    .map(([label, value], i) => {
+    .map(([label, value, isTrusted], i) => {
       const cell = `padding:10px 16px;${i ? `border-top:1px solid ${c.border};` : ""}`;
+      const tagHtml = isTrusted
+        ? ` ${pill(`✓ ${TRUSTED_LABEL}`, "good", `margin-left:6px;padding:2px 8px;font:600 11px/1.5 ${SANS};white-space:nowrap;`)}`
+        : "";
       return `<tr>
       <td style="${cell}font:13px/1.4 ${SANS};color:${c.muted};width:96px;vertical-align:top;">${escapeHtml(label)}</td>
-      <td style="${cell}font:600 14px/1.4 ${SANS};color:${c.text};word-break:break-word;">${escapeHtml(value)}</td>
+      <td style="${cell}font:600 14px/1.4 ${SANS};color:${c.text};word-break:break-word;">${escapeHtml(value)}${tagHtml}</td>
     </tr>`;
     })
     .join("");
