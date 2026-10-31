@@ -1,9 +1,5 @@
-"use client";
-
-import { useQuery } from "convex/react";
 import { LoanBoard } from "@/components/loans/loan-board";
 import { PageHeader } from "@/components/page-header";
-import { api } from "../../../../../convex/_generated/api";
 
 const COPY = {
   active: {
@@ -18,8 +14,6 @@ const COPY = {
 };
 
 export default function MyRequestsPage() {
-  const board = useQuery(api.loans.listMyRequests);
-
   return (
     <>
       <PageHeader
@@ -27,7 +21,7 @@ export default function MyRequestsPage() {
         eyebrow="Borrowing"
         title="My requests"
       />
-      <LoanBoard board={board} copy={COPY} />
+      <LoanBoard copy={COPY} viewerRole="borrower" />
     </>
   );
 }

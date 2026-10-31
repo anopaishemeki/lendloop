@@ -346,7 +346,6 @@ The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import
   - Rotate the two HMAC secrets periodically.
   - To rotate without downtime, accept a list of active secrets during the overlap. Today a single secret is configured per direction.
 - **Scale:**
-  - Paginate `tools.list` and the loan boards. They load everything at neighborhood scale; admin lists are already paginated.
   - Keep counters (for example `@convex-dev/aggregate`) for the admin overview. Today it counts up to 1,000 rows per number, and because queries are reactive, writes to the counted tables re-run it; delivery counts are a separate query so retries only re-run that one.
   - Overdue reminders take 200 loans per run; schedule more frequent runs if the backlog grows.
   - Consider a counter table for availability instead of a per-tool index read.

@@ -1,7 +1,7 @@
 import type { usePaginatedQuery } from "convex/react";
 import type { ReactNode } from "react";
 import { EmptyState } from "@/components/empty-state";
-import { Button } from "@/components/ui/button";
+import { LoadMoreButton } from "@/components/load-more";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table } from "@/components/ui/table";
 
@@ -24,7 +24,7 @@ export function TableState<T>({
   showLoadMore?: boolean;
   children: (rows: T[]) => ReactNode;
 }) {
-  const { results, status, loadMore } = query;
+  const { results, status } = query;
   if (status === "LoadingFirstPage") return <Skeleton className="h-48" />;
   if (results.length === 0) return <EmptyState title={empty} />;
   return (
@@ -32,16 +32,8 @@ export function TableState<T>({
       <div className="surface overflow-hidden">
         <Table>{children(results)}</Table>
       </div>
-      {showLoadMore &&
-      (status === "CanLoadMore" || status === "LoadingMore") ? (
-        <Button
-          disabled={status === "LoadingMore"}
-          onClick={() => loadMore(ADMIN_PAGE_SIZE)}
-          size="sm"
-          variant="outline"
-        >
-          {status === "LoadingMore" ? "Loading…" : "Load more"}
-        </Button>
+      {showLoadMore ? (
+        <LoadMoreButton pageSize={ADMIN_PAGE_SIZE} query={query} />
       ) : null}
     </div>
   );
