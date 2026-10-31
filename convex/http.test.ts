@@ -133,6 +133,7 @@ describe("GET /n8n/overdue-loans", () => {
           idempotencyKey: `${overdue}:${today}`,
           loanId: overdue,
           ownerFirstName: "olive",
+          ownerIsTrustedLender: false,
           toolName: "Drill",
         },
       ],

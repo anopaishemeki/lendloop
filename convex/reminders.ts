@@ -4,7 +4,7 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { daysBetween, isIsoDate } from "./lib/dates";
 import { cachedGet } from "./lib/db";
 import { isOverdue, overdueLoans } from "./lib/loans";
-import { firstName } from "./lib/users";
+import { firstName, isTrustedLender } from "./lib/users";
 import { reminderStatusValidator } from "./lib/validators";
 
 const OVERDUE_BATCH = 200;
@@ -26,6 +26,7 @@ const overdueLoanValidator = v.object({
   idempotencyKey: v.string(),
   loanId: v.id("loans"),
   ownerFirstName: v.string(),
+  ownerIsTrustedLender: v.boolean(),
   // Absent once the listing is gone; n8n words the email around it.
   toolName: v.optional(v.string()),
 });
@@ -71,6 +72,7 @@ export const listOverdue = internalQuery({
           idempotencyKey: reminderKey(loan._id, today),
           loanId: loan._id,
           ownerFirstName: owner ? firstName(owner.name) : "the owner",
+          ownerIsTrustedLender: isTrustedLender(owner),
           toolName: tool?.name,
         };
       })

@@ -5,9 +5,13 @@ export function firstName(name: string): string {
   return name.split(" ")[0] || name;
 }
 
+export function isTrustedLender(user: Doc<"users"> | null): boolean {
+  return user?.isTrustedLender ?? false;
+}
+
 export function publicProfile(user: Doc<"users"> | null) {
   return {
     firstName: user ? firstName(user.name) : "Neighbor",
-    isTrustedLender: user?.isTrustedLender ?? false,
+    isTrustedLender: isTrustedLender(user),
   };
 }
