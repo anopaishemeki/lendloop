@@ -8,7 +8,7 @@ import { mutation, type QueryCtx, query } from "./_generated/server";
 import { fail, requireAdmin } from "./auth";
 import { availabilityOf, availabilityValidator } from "./lib/availability";
 import { addDays, DAY_MS, todayUtc } from "./lib/dates";
-import { cachedGet } from "./lib/db";
+import { cachedGet, mapPage } from "./lib/db";
 import { isOverdue, overdueLoans } from "./lib/loans";
 import { redriveFailedDeliveries } from "./lib/notifications";
 import { isTrustedLender } from "./lib/users";
@@ -96,27 +96,24 @@ export const listLoans = query({
     );
 
     const get = cachedGet(ctx);
-    const page = await Promise.all(
-      result.page.map(async (loan) => {
-        const [tool, owner, borrower] = await Promise.all([
-          get(loan.toolId),
-          get(loan.ownerId),
-          get(loan.borrowerId),
-        ]);
-        return {
-          _creationTime: loan._creationTime,
-          _id: loan._id,
-          borrower: adminPerson(borrower),
-          endDate: loan.endDate,
-          isOverdue: isOverdue(loan, today),
-          owner: adminPerson(owner),
-          startDate: loan.startDate,
-          status: loan.status,
-          toolName: toolNameOf(tool),
-        };
-      })
-    );
-    return { ...result, page };
+    return await mapPage(result, async (loan) => {
+      const [tool, owner, borrower] = await Promise.all([
+        get(loan.toolId),
+        get(loan.ownerId),
+        get(loan.borrowerId),
+      ]);
+      return {
+        _creationTime: loan._creationTime,
+        _id: loan._id,
+        borrower: adminPerson(borrower),
+        endDate: loan.endDate,
+        isOverdue: isOverdue(loan, today),
+        owner: adminPerson(owner),
+        startDate: loan.startDate,
+        status: loan.status,
+        toolName: toolNameOf(tool),
+      };
+    });
   },
   returns: paginationResultValidator(adminLoanView),
 });
@@ -133,22 +130,19 @@ export const listTools = query({
       .paginate(paginationOpts);
     const today = todayUtc();
     const get = cachedGet(ctx);
-    const page = await Promise.all(
-      result.page.map(async (tool) => {
-        const [owner, availability] = await Promise.all([
-          get(tool.ownerId),
-          availabilityOf(ctx, tool._id, today),
-        ]);
-        return {
-          _id: tool._id,
-          availability,
-          category: tool.category,
-          name: tool.name,
-          owner: adminPerson(owner),
-        };
-      })
-    );
-    return { ...result, page };
+    return await mapPage(result, async (tool) => {
+      const [owner, availability] = await Promise.all([
+        get(tool.ownerId),
+        availabilityOf(ctx, tool._id, today),
+      ]);
+      return {
+        _id: tool._id,
+        availability,
+        category: tool.category,
+        name: tool.name,
+        owner: adminPerson(owner),
+      };
+    });
   },
   returns: paginationResultValidator(adminToolView),
 });
@@ -319,27 +313,24 @@ export const listNotifications = query({
       : ctx.db.query("notificationOutbox");
     const result = await rows.order("desc").paginate(paginationOpts);
     const get = cachedGet(ctx);
-    const page = await Promise.all(
-      result.page.map(async (entry) => {
-        const [loan, recipient] = await Promise.all([
-          get(entry.loanId),
-          get(entry.recipientId),
-        ]);
-        const tool = loan ? await get(loan.toolId) : null;
-        return {
-          _creationTime: entry._creationTime,
-          _id: entry._id,
-          attempts: entry.attempts,
-          event: entry.event,
-          lastError: entry.lastError,
-          recipient: adminPerson(recipient),
-          sentAt: entry.sentAt,
-          status: entry.status,
-          toolName: toolNameOf(tool),
-        };
-      })
-    );
-    return { ...result, page };
+    return await mapPage(result, async (entry) => {
+      const [loan, recipient] = await Promise.all([
+        get(entry.loanId),
+        get(entry.recipientId),
+      ]);
+      const tool = loan ? await get(loan.toolId) : null;
+      return {
+        _creationTime: entry._creationTime,
+        _id: entry._id,
+        attempts: entry.attempts,
+        event: entry.event,
+        lastError: entry.lastError,
+        recipient: adminPerson(recipient),
+        sentAt: entry.sentAt,
+        status: entry.status,
+        toolName: toolNameOf(tool),
+      };
+    });
   },
   returns: paginationResultValidator(adminNotificationView),
 });
@@ -364,24 +355,21 @@ export const listReminders = query({
       .order("desc")
       .paginate(paginationOpts);
     const get = cachedGet(ctx);
-    const page = await Promise.all(
-      result.page.map(async (reminder) => {
-        const loan = await get(reminder.loanId);
-        const [tool, borrower] = loan
-          ? await Promise.all([get(loan.toolId), get(loan.borrowerId)])
-          : [null, null];
-        return {
-          _id: reminder._id,
-          borrower: adminPerson(borrower),
-          error: reminder.error,
-          reminderDate: reminder.reminderDate,
-          status: reminder.status,
-          toolName: toolNameOf(tool),
-          updatedAt: reminder.updatedAt,
-        };
-      })
-    );
-    return { ...result, page };
+    return await mapPage(result, async (reminder) => {
+      const loan = await get(reminder.loanId);
+      const [tool, borrower] = loan
+        ? await Promise.all([get(loan.toolId), get(loan.borrowerId)])
+        : [null, null];
+      return {
+        _id: reminder._id,
+        borrower: adminPerson(borrower),
+        error: reminder.error,
+        reminderDate: reminder.reminderDate,
+        status: reminder.status,
+        toolName: toolNameOf(tool),
+        updatedAt: reminder.updatedAt,
+      };
+    });
   },
   returns: paginationResultValidator(adminReminderView),
 });

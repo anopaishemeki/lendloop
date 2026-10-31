@@ -25,6 +25,7 @@ import type * as lib_text from "../lib/text.js";
 import type * as lib_users from "../lib/users.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as loans from "../loans.js";
+import type * as migrations from "../migrations.js";
 import type * as notifications from "../notifications.js";
 import type * as reminders from "../reminders.js";
 import type * as tools from "../tools.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   "lib/users": typeof lib_users;
   "lib/validators": typeof lib_validators;
   loans: typeof loans;
+  migrations: typeof migrations;
   notifications: typeof notifications;
   reminders: typeof reminders;
   tools: typeof tools;

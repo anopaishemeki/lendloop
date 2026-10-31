@@ -1,3 +1,4 @@
+import type { PaginationResult } from "convex/server";
 import type { Doc, Id, TableNames } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { fail } from "../auth";
@@ -33,4 +34,12 @@ export async function getActiveTool(
   const tool = await findActiveTool(ctx, toolId);
   if (!tool) fail("NOT_FOUND", "That tool is no longer listed.");
   return tool;
+}
+
+/** Maps the rows of one page of a paginated query, keeping the cursor fields. */
+export async function mapPage<T, U>(
+  result: PaginationResult<T>,
+  fn: (row: T) => Promise<U>
+): Promise<PaginationResult<U>> {
+  return { ...result, page: await Promise.all(result.page.map(fn)) };
 }

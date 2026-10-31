@@ -13,6 +13,8 @@ export default defineSchema({
   // A borrow request and its lifecycle. Dates are UTC calendar days (YYYY-MM-DD).
   loans: defineTable({
     borrowerId: v.id("users"),
+    // Set when the loan reaches a closed status (see CLOSED_LOAN_STATUSES).
+    closedAt: v.optional(v.number()),
     decidedAt: v.optional(v.number()),
     endDate: v.string(),
     note: v.optional(v.string()),
@@ -22,8 +24,15 @@ export default defineSchema({
     status: loanStatusValidator,
     toolId: v.id("tools"),
   })
-    .index("by_borrower_and_status", ["borrowerId", "status"])
-    .index("by_owner_and_status", ["ownerId", "status"])
+    // A person's closed loans, most recently closed first (board history).
+    .index("by_owner_closed", ["ownerId", "closedAt"])
+    .index("by_borrower_closed", ["borrowerId", "closedAt"])
+    // Open loans on the boards, most urgent first: requests by start date,
+    // approved loans by end date (so overdue ones lead).
+    .index("by_borrower_status_start", ["borrowerId", "status", "startDate"])
+    .index("by_borrower_status_end", ["borrowerId", "status", "endDate"])
+    .index("by_owner_status_start", ["ownerId", "status", "startDate"])
+    .index("by_owner_status_end", ["ownerId", "status", "endDate"])
     .index("by_status", ["status"])
     .index("by_status_and_end_date", ["status", "endDate"])
     .index("by_tool_and_status_and_start_date", [

@@ -1,3 +1,7 @@
+import {
+  paginationOptsValidator,
+  paginationResultValidator,
+} from "convex/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, type QueryCtx, query } from "./_generated/server";
@@ -15,7 +19,7 @@ import {
   isOnLoan,
 } from "./lib/availability";
 import { todayUtc } from "./lib/dates";
-import { cachedGet, findActiveTool, getActiveTool } from "./lib/db";
+import { cachedGet, findActiveTool, getActiveTool, mapPage } from "./lib/db";
 import { loansForTool, transitionLoan } from "./lib/loans";
 import { cleanText } from "./lib/text";
 import { publicProfile } from "./lib/users";
@@ -47,6 +51,8 @@ const toolView = v.object({
   name: v.string(),
   owner: v.object({ firstName: v.string(), isTrustedLender: v.boolean() }),
 });
+
+export type ToolView = typeof toolView.type;
 
 const publicToolView = v.object({
   category: categoryValidator,
@@ -128,9 +134,13 @@ export const listPublic = query({
   returns: v.array(publicToolView),
 });
 
+/** Live listings, newest first, a page at a time. */
 export const list = query({
-  args: { category: v.optional(categoryValidator) },
-  handler: async (ctx, { category }) => {
+  args: {
+    category: v.optional(categoryValidator),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, { category, paginationOpts }) => {
     const viewer = await requireViewer(ctx);
     const listed = category
       ? ctx.db
@@ -141,10 +151,10 @@ export const list = query({
       : ctx.db
           .query("tools")
           .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined));
-    const tools = await listed.order("desc").collect();
-    return await Promise.all(tools.map(viewBuilder(ctx, viewer)));
+    const result = await listed.order("desc").paginate(paginationOpts);
+    return await mapPage(result, viewBuilder(ctx, viewer));
   },
-  returns: v.array(toolView),
+  returns: paginationResultValidator(toolView),
 });
 
 /**
