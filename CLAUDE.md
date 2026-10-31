@@ -31,6 +31,7 @@ npx vitest run convex/loans.test.ts -t "approve"   # single test by name
 npm run check:n8n           # scan n8n/workflows/*.json for secrets and credential IDs
 npm run sync:n8n            # copy n8n/snippets/*.js into the Code nodes that mark them
 npx convex run notifications:redriveFailed # resend failed n8n notification events
+npx convex run seed:demo    # demo data (seed:removeDemo undoes it; seed:removeE2E clears e2e leftovers)
 ```
 
 ## Architecture
@@ -57,4 +58,5 @@ End-to-end specs (`tests/e2e`, Playwright + `@clerk/testing`) sign in as three C
 
 ## Known open items
 
+- The dev deployment is both the live demo backend and e2e staging, so the CI e2e job is manual-only; a separate staging deployment would let it run on every push.
 - Optional: sign a fixed route name instead of the URL pathname for request events, so n8n needn't parse the webhook URL (changes the signing contract on both sides).
