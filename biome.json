@@ -68,6 +68,19 @@
       }
     },
     {
+      "includes": ["n8n/snippets/**"],
+      "javascript": {
+        "globals": ["$env", "$vars"]
+      },
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedVariables": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["src/components/ui/**"],
       "linter": {
         "rules": {
