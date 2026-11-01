@@ -25,7 +25,7 @@ A neighborhood tool-lending board. Neighbors list tools they're happy to lend, r
 
 ## Requirements checklist
 
-How each part of the brief is met, and where to look.
+How each part of the brief is met, and where to look. The full [traceability matrix](docs/traceability.md) traces every feature, including those beyond the brief, to its implementation, tests, pull requests and status.
 
 | Requirement | Where |
 |---|---|
