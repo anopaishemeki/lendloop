@@ -240,6 +240,7 @@ describe("admin portal", () => {
       await s.admin.caller.query(api.admin.listTools, { paginationOpts: PAGE })
     ).page;
     expect(tool?.owner.isTrustedLender).toBe(true);
+    expect(tool?.condition).toBe("good");
 
     expect(await s.admin.caller.query(api.admin.overview, {})).toMatchObject({
       listings: 1,
