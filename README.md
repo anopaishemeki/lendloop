@@ -501,5 +501,6 @@ Internal Convex functions, run from the CLI (or the Convex dashboard) against th
 | `npx convex run seed:demo` / `seed:removeDemo` | Add or remove the demo data |
 | `npx convex run seed:removeE2E` | Clear what a manual end-to-end run left on staging |
 | `npx convex run loans:setNote '{"loanId": "…", "note": "…"}'` | Correct a loan's note (there's no in-app edit) |
+| `npx convex run reports:setDetails '{"reportId": "…", "details": "…"}'` | Correct a report's details (reports aren't editable in the app) |
 
 Every migration pages through its table on its own and is safe to re-run.
