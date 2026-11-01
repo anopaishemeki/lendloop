@@ -267,41 +267,48 @@ export const automationHealth = query({
     // Rounded to the hour so the bound (and the query's cache) stays stable.
     const weekAgo =
       Math.floor((Date.now() - WEEK_DAYS * DAY_MS) / HOUR_MS) * HOUR_MS;
-    const [[deliveredThisWeek, queued, failed], remindersThisWeek] =
-      await Promise.all([
-        deliveryCounts.countBatch(ctx, [
-          {
-            bounds: { lower: { inclusive: true, key: weekAgo } },
-            namespace: "sent",
-          },
-          { namespace: "pending" },
-          { namespace: "failed" },
-        ]),
-        reminderCounts.countBatch(
-          ctx,
-          REMINDER_STATUSES.map((namespace) => ({
-            bounds: {
-              lower: {
-                inclusive: true,
-                key: addDays(todayUtc(), 1 - WEEK_DAYS),
-              },
+    const [
+      [deliveredThisWeek, queued, failed],
+      [remindersSentThisWeek = 0, remindersFailedThisWeek = 0],
+    ] = await Promise.all([
+      deliveryCounts.countBatch(ctx, [
+        {
+          bounds: { lower: { inclusive: true, key: weekAgo } },
+          namespace: "sent",
+        },
+        { namespace: "pending" },
+        { namespace: "failed" },
+      ]),
+      reminderCounts.countBatch(
+        ctx,
+        REMINDER_STATUSES.map((namespace) => ({
+          bounds: {
+            lower: {
+              inclusive: true,
+              key: addDays(todayUtc(), 1 - WEEK_DAYS),
             },
-            namespace,
-          }))
-        ),
-      ]);
+          },
+          namespace,
+        }))
+      ),
+    ]);
     return {
       deliveredThisWeek: deliveredThisWeek ?? 0,
       failed: failed ?? 0,
       queued: queued ?? 0,
-      remindersThisWeek: remindersThisWeek.reduce((sum, n) => sum + n, 0),
+      // Reminders retry on their own (each hourly run, then daily), so they're
+      // counted for the week rather than as an outstanding backlog.
+      remindersFailedThisWeek,
+      remindersSentThisWeek,
     };
   },
   returns: v.object({
     deliveredThisWeek: v.number(),
+    // Request notifications currently failed (retry them from Automation).
     failed: v.number(),
     queued: v.number(),
-    remindersThisWeek: v.number(),
+    remindersFailedThisWeek: v.number(),
+    remindersSentThisWeek: v.number(),
   }),
 });
 
