@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { addDays, todayUtc } from "./lib/dates";
 import type { ReportStatus } from "./lib/validators";
@@ -164,5 +164,26 @@ describe("admin report queue", () => {
     expect(rest).toEqual([]);
     expect(open?.status).toBe("open");
     expect(open?.availability).toBeUndefined();
+  });
+});
+
+describe("reports.setDetails (internal)", () => {
+  test("replaces, cleans and clears a report's details", async () => {
+    const s = await setup();
+    await report(s, s.ben, "first draft");
+    const [open] = await queue(s, "open");
+    const details = async () => (await queue(s, "open"))[0]?.details;
+
+    await s.t.mutation(internal.reports.setDetails, {
+      details: "  The chuck wobbles at speed.  ",
+      reportId: open!._id,
+    });
+    expect(await details()).toBe("The chuck wobbles at speed.");
+
+    await s.t.mutation(internal.reports.setDetails, {
+      details: "",
+      reportId: open!._id,
+    });
+    expect(await details()).toBeUndefined();
   });
 });
