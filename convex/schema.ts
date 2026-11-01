@@ -102,6 +102,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_owner_and_removed_at", ["ownerId", "removedAt"])
+    .index("by_condition_and_removed_at", ["condition", "removedAt"])
     .index("by_category_and_removed_at", ["category", "removedAt"])
     .index("by_removed_at", ["removedAt"]),
 
