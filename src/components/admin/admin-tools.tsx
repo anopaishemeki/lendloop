@@ -1,14 +1,10 @@
 "use client";
 
 import { usePaginatedQuery } from "convex/react";
-import { X } from "lucide-react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { CategoryIcon } from "@/components/category-icon";
 import { AvailabilityBadge } from "@/components/tools/availability-badge";
 import { RemoveToolButton } from "@/components/tools/remove-tool-button";
 import { NameWithBadge } from "@/components/trusted-lender-badge";
-import { Button } from "@/components/ui/button";
 import {
   TableBody,
   TableCell,
@@ -18,77 +14,25 @@ import {
 } from "@/components/ui/table";
 import { CATEGORY_LABELS, CONDITION_LABELS } from "@/lib/tool-labels";
 import { api } from "../../../convex/_generated/api";
-import {
-  TOOL_CATEGORIES,
-  TOOL_CONDITIONS,
-  type ToolCategory,
-  type ToolCondition,
-} from "../../../convex/lib/validators";
 import { ADMIN_PAGE_SIZE, TableState } from "./table-state";
-import { UrlFilter } from "./url-filter";
-import { UrlSearch } from "./url-search";
+import { ToolFilterControls, useToolFilters } from "./tool-filters";
 
-const ALL = "all";
 const BASE_PATH = "/admin/listings";
-
-const CATEGORY_OPTIONS = [
-  { label: "Any category", value: ALL },
-  ...TOOL_CATEGORIES.map((value) => ({ label: CATEGORY_LABELS[value], value })),
-] as const;
-const CONDITION_OPTIONS = [
-  { label: "Any condition", value: ALL },
-  ...TOOL_CONDITIONS.map((value) => ({
-    label: CONDITION_LABELS[value],
-    value,
-  })),
-] as const;
 
 /** Live listings, filtered by the URL's ?q (name), ?category and ?condition. */
 export function AdminTools() {
-  const params = useSearchParams();
-  const search = params.get("q")?.trim() || undefined;
-  const category = TOOL_CATEGORIES.find((v) => v === params.get("category"));
-  const condition = TOOL_CONDITIONS.find((v) => v === params.get("condition"));
-  const filtered = Boolean(search || category || condition);
-  const tools = usePaginatedQuery(
-    api.admin.listTools,
-    { category, condition, search },
-    { initialNumItems: ADMIN_PAGE_SIZE }
-  );
+  const { filters, isFiltered: filtered } = useToolFilters();
+  const tools = usePaginatedQuery(api.admin.listTools, filters, {
+    initialNumItems: ADMIN_PAGE_SIZE,
+  });
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <UrlSearch
-          basePath={BASE_PATH}
-          label="Search listings by name"
-          placeholder="Search by name"
-        />
-        <UrlFilter<ToolCategory | typeof ALL>
-          basePath={BASE_PATH}
-          defaultValue={ALL}
-          label="Filter by category"
-          options={CATEGORY_OPTIONS}
-          param="category"
-          value={category ?? ALL}
-        />
-        <UrlFilter<ToolCondition | typeof ALL>
-          basePath={BASE_PATH}
-          defaultValue={ALL}
-          label="Filter by condition"
-          options={CONDITION_OPTIONS}
-          param="condition"
-          value={condition ?? ALL}
-        />
-        {filtered ? (
-          <Button asChild size="sm" variant="ghost">
-            <Link href={BASE_PATH} scroll={false}>
-              <X aria-hidden />
-              Clear filters
-            </Link>
-          </Button>
-        ) : null}
-      </div>
+      <ToolFilterControls
+        basePath={BASE_PATH}
+        filtered={filtered}
+        searchLabel="Search listings by tool name"
+      />
       <TableState
         empty={
           filtered ? "No listings match these filters." : "No listings yet."
