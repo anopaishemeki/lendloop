@@ -170,19 +170,19 @@ export const get = query({
 });
 
 export const listMine = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
     const viewer = await requireViewer(ctx);
-    const tools = await ctx.db
+    const result = await ctx.db
       .query("tools")
       .withIndex("by_owner_and_removed_at", (q) =>
         q.eq("ownerId", viewer.user._id).eq("removedAt", undefined)
       )
       .order("desc")
-      .collect();
-    return await Promise.all(tools.map(viewBuilder(ctx, viewer)));
+      .paginate(paginationOpts);
+    return await mapPage(result, viewBuilder(ctx, viewer));
   },
-  returns: v.array(toolView),
+  returns: paginationResultValidator(toolView),
 });
 
 export const create = mutation({

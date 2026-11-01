@@ -141,7 +141,10 @@ describe("tools.remove", () => {
       bob.caller.mutation(api.tools.remove, { toolId })
     ).rejects.toThrow(/owner or an admin/u);
     await admin.caller.mutation(api.tools.remove, { toolId });
-    expect(await alice.caller.query(api.tools.listMine, {})).toEqual([]);
+    const mine = await alice.caller.query(api.tools.listMine, {
+      paginationOpts: { cursor: null, numItems: 10 },
+    });
+    expect(mine.page).toEqual([]);
   });
 
   test("declines open requests and blocks the owner while the tool is out", async () => {
