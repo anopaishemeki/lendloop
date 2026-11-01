@@ -78,7 +78,7 @@ const adminUserView = v.object({
 });
 
 /** Newest first, except overdue loans: most overdue first. */
-function loansFiltered(
+function loansByStatus(
   ctx: QueryCtx,
   status: LoanStatus | "overdue" | undefined,
   today: string
@@ -91,30 +91,89 @@ function loansFiltered(
     .order("desc");
 }
 
+type LoanFilters = {
+  category?: ToolCategory;
+  condition?: ToolCondition;
+  search?: string;
+  status?: LoanStatus | "overdue";
+};
+
+/**
+ * Loans matching the filters. A tool-name search uses the search index
+ * (best match first); otherwise status picks the index and the tool's category
+ * and condition narrow it.
+ */
+function loansFiltered(
+  ctx: QueryCtx,
+  { category, condition, search, status }: LoanFilters,
+  today: string
+) {
+  const text = search?.trim();
+  if (text) {
+    const matches = ctx.db
+      .query("loans")
+      .withSearchIndex("search_tool_name", (q) => {
+        let matching = q.search("toolName", text);
+        if (status) {
+          matching = matching.eq(
+            "status",
+            status === "overdue" ? "approved" : status
+          );
+        }
+        if (category) matching = matching.eq("toolCategory", category);
+        if (condition) matching = matching.eq("toolCondition", condition);
+        return matching;
+      });
+    return status === "overdue"
+      ? matches.filter((q) => q.lt(q.field("endDate"), today))
+      : matches;
+  }
+
+  const base = loansByStatus(ctx, status, today);
+  if (!(category || condition)) return base;
+  return base.filter((q) =>
+    q.and(
+      category ? q.eq(q.field("toolCategory"), category) : true,
+      condition ? q.eq(q.field("toolCondition"), condition) : true
+    )
+  );
+}
+
 function toolNameOf(tool: Doc<"tools"> | null) {
   return tool?.name ?? "Removed tool";
 }
 
-/** Every loan, newest first, optionally narrowed to one status. */
+/**
+ * Loans, narrowed by status (including overdue), the borrowed tool's name,
+ * category and condition. Newest first (overdue: most overdue first); with a
+ * name search, best match first. Without a search, category and condition
+ * filter the status scan, so a rare value can leave a page short: fine at this
+ * size, and it avoids an index per combination.
+ */
 export const listLoans = query({
   args: {
-    // "overdue" narrows to approved loans past their end date.
+    category: v.optional(categoryValidator),
+    condition: v.optional(conditionValidator),
     paginationOpts: paginationOptsValidator,
+    // Matched against the borrowed tool's name.
+    search: v.optional(v.string()),
+    // "overdue" narrows to approved loans past their end date.
     status: v.optional(v.union(loanStatusValidator, v.literal("overdue"))),
   },
-  handler: async (ctx, { paginationOpts, status }) => {
+  handler: async (ctx, { paginationOpts, ...filters }) => {
     await requireAdmin(ctx);
     const today = todayUtc();
-    const result = await loansFiltered(ctx, status, today).paginate(
+    const result = await loansFiltered(ctx, filters, today).paginate(
       paginationOpts
     );
 
     const get = cachedGet(ctx);
     return await mapPage(result, async (loan) => {
-      const [tool, owner, borrower] = await Promise.all([
-        get(loan.toolId),
+      const [owner, borrower, toolName] = await Promise.all([
         get(loan.ownerId),
         get(loan.borrowerId),
+        // The loan's copy, so the row shows the name a search matched.
+        loan.toolName ?? get(loan.toolId).then(toolNameOf),
       ]);
       return {
         _creationTime: loan._creationTime,
@@ -125,7 +184,7 @@ export const listLoans = query({
         owner: adminPerson(owner),
         startDate: loan.startDate,
         status: loan.status,
-        toolName: toolNameOf(tool),
+        toolName,
       };
     });
   },
