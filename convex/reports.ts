@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { fail, isSelf, requireViewer } from "./auth";
-import { mutation } from "./functions";
+import { internalMutation, mutation } from "./functions";
 import { getActiveTool } from "./lib/db";
 import { enforceRateLimit } from "./lib/limits";
 import { cleanText } from "./lib/text";
@@ -40,6 +40,25 @@ export const create = mutation({
       ...toolFieldsOf(tool),
       ...(cleanDetails ? { details: cleanDetails } : {}),
     });
+    return null;
+  },
+  returns: v.null(),
+});
+
+/**
+ * Corrects a report's details (reports aren't editable in the app), e.g. to
+ * tidy demo data. Internal, so only the CLI or dashboard can call it:
+ *   npx convex run reports:setDetails '{"reportId": "...", "details": "..."}'
+ * Empty details remove them.
+ */
+export const setDetails = internalMutation({
+  args: { details: v.string(), reportId: v.id("reports") },
+  handler: async (ctx, { details, reportId }) => {
+    if (!(await ctx.db.get(reportId))) {
+      fail("NOT_FOUND", "That report no longer exists.");
+    }
+    const clean = cleanText(details, "Details", 0, REPORT_DETAILS_MAX);
+    await ctx.db.patch(reportId, { details: clean || undefined });
     return null;
   },
   returns: v.null(),
