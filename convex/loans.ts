@@ -13,7 +13,7 @@ import {
   requireViewer,
   type Viewer,
 } from "./auth";
-import { mutation } from "./functions";
+import { internalMutation, mutation } from "./functions";
 import { activityValidator, loanActivity } from "./lib/activity";
 import { isOnLoan } from "./lib/availability";
 import {
@@ -420,4 +420,23 @@ export const bookedRanges = query({
       .sort((a, b) => a.startDate.localeCompare(b.startDate));
   },
   returns: v.array(v.object({ endDate: v.string(), startDate: v.string() })),
+});
+
+/**
+ * Corrects a loan's note (there's no edit in the app once a request is sent),
+ * e.g. to tidy demo data. Emails already sent keep the old wording, and the
+ * edit isn't recorded in the loan's activity. Internal, so only the CLI or dashboard can call it:
+ *   npx convex run loans:setNote '{"loanId": "...", "note": "..."}'
+ * An empty note removes it.
+ */
+export const setNote = internalMutation({
+  args: { loanId: v.id("loans"), note: v.string() },
+  handler: async (ctx, { loanId, note }) => {
+    const loan = await ctx.db.get(loanId);
+    if (!loan) fail("NOT_FOUND", "That loan no longer exists.");
+    const clean = cleanText(note, "Note", 0, LOAN_NOTE_MAX);
+    await ctx.db.patch(loanId, { note: clean || undefined });
+    return null;
+  },
+  returns: v.null(),
 });

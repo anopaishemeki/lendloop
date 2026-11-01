@@ -32,6 +32,7 @@ npm run check:n8n           # scan n8n/workflows/*.json for secrets and credenti
 npm run sync:n8n            # copy n8n/snippets/*.js into the Code nodes that mark them
 npx convex run notifications:redriveFailed # resend failed n8n notification events
 npx convex run seed:demo    # demo data (seed:removeDemo undoes it; seed:removeE2E clears e2e leftovers)
+npx convex run loans:setNote '{"loanId":"…","note":"…"}'   # correct a loan note (no in-app edit)
 ```
 
 ## Architecture

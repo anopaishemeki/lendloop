@@ -512,3 +512,20 @@ describe("activity", () => {
     ).resolves.toHaveLength(2);
   });
 });
+
+describe("loans.setNote (internal)", () => {
+  test("replaces, cleans and clears a loan's note", async () => {
+    const s = await setup();
+    const loanId = await requestFor(s);
+    const note = async () => (await s.t.run((ctx) => ctx.db.get(loanId)))?.note;
+
+    await s.t.mutation(internal.loans.setNote, {
+      loanId,
+      note: "  Trimming the front hedge.  ",
+    });
+    expect(await note()).toBe("Trimming the front hedge.");
+
+    await s.t.mutation(internal.loans.setNote, { loanId, note: "" });
+    expect(await note()).toBeUndefined();
+  });
+});
