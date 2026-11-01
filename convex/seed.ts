@@ -4,7 +4,7 @@ import type { Id, TableNames } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation } from "./functions";
 import { addDays, dayStartMs, todayUtc } from "./lib/dates";
-import { isClosedStatus, recipientOf } from "./lib/loans";
+import { isClosedStatus, recipientOf, toolFieldsOf } from "./lib/loans";
 import type {
   LoanStatus,
   NotificationEvent,
@@ -428,12 +428,13 @@ export const demo = internalMutation({
         })
       );
     }
-    const ownerOf = new Map(TOOLS.map((tool) => [tool.key, tool.owner]));
+    const toolSeeds = new Map(TOOLS.map((tool) => [tool.key, tool]));
 
     for (const seed of LOANS) {
+      const tool = toolSeeds.get(seed.tool)!;
       const parties = {
         borrowerId: person(seed.borrower),
-        ownerId: person(ownerOf.get(seed.tool)!),
+        ownerId: person(tool.owner),
       };
       const decidedAt =
         seed.decided === undefined ? undefined : at(seed.decided, 18);
@@ -441,6 +442,7 @@ export const demo = internalMutation({
         seed.returned === undefined ? undefined : at(seed.returned, 17);
       const loanId = await ctx.db.insert("loans", {
         ...parties,
+        ...toolFieldsOf(tool),
         endDate: addDays(today, seed.end),
         startDate: addDays(today, seed.start),
         status: seed.status,

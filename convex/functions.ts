@@ -10,6 +10,7 @@ import {
   mutation as rawMutation,
 } from "./_generated/server";
 import { COUNTERS } from "./lib/counters";
+import { syncLoanToolFields } from "./lib/loans";
 
 /**
  * Every write to the counted tables also updates the admin overview counters
@@ -22,6 +23,8 @@ triggers.register("notificationOutbox", COUNTERS.notificationOutbox.trigger);
 triggers.register("reminders", COUNTERS.reminders.trigger);
 triggers.register("reports", COUNTERS.reports.trigger);
 triggers.register("tools", COUNTERS.tools.trigger);
+// Loans keep a copy of their tool's name, category and condition.
+triggers.register("tools", syncLoanToolFields);
 triggers.register("users", COUNTERS.users.trigger);
 
 /** A ctx whose writes also update the counters (tests use it with t.run). */

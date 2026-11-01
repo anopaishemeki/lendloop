@@ -506,3 +506,104 @@ describe("listTools filters", () => {
     expect(await names({ search: "   " })).toHaveLength(4);
   });
 });
+
+describe("listLoans filters", () => {
+  test("by tool name, category, condition and status, combined", async () => {
+    const s = await setup();
+    const day = (offset: number) => addDays(todayUtc(), offset);
+    const tool = (
+      name: string,
+      category: "garden" | "kitchen",
+      condition: "new" | "worn"
+    ) =>
+      s.owner.caller.mutation(api.tools.create, {
+        category,
+        condition,
+        description: "",
+        name,
+      });
+    const borrow = (toolId: Awaited<ReturnType<typeof tool>>, offset: number) =>
+      s.borrower.caller.mutation(api.loans.request, {
+        endDate: day(offset),
+        startDate: day(offset),
+        toolId,
+      });
+    const spade = await tool("Garden spade", "garden", "worn");
+    const hose = await tool("Garden hose", "garden", "new");
+    const mixer = await tool("Stand mixer", "kitchen", "new");
+    const spadeLoan = await borrow(spade, 1);
+    await borrow(hose, 2);
+    await borrow(mixer, 3);
+    await s.owner.caller.mutation(api.loans.approve, { loanId: spadeLoan });
+
+    const tools = async (filters: {
+      category?: "garden" | "kitchen";
+      condition?: "new" | "worn";
+      search?: string;
+      status?: "requested" | "approved" | "overdue";
+    }) =>
+      (
+        await s.admin.caller.query(api.admin.listLoans, {
+          ...filters,
+          paginationOpts: PAGE,
+        })
+      ).page
+        .map((loan) => loan.toolName)
+        .sort();
+    expect(await tools({ search: "garden" })).toEqual([
+      "Garden hose",
+      "Garden spade",
+    ]);
+    expect(await tools({ category: "kitchen" })).toEqual(["Stand mixer"]);
+    expect(await tools({ condition: "new" })).toEqual([
+      "Garden hose",
+      "Stand mixer",
+    ]);
+    expect(await tools({ category: "garden", status: "approved" })).toEqual([
+      "Garden spade",
+    ]);
+    expect(
+      await tools({ condition: "new", search: "garden", status: "requested" })
+    ).toEqual(["Garden hose"]);
+    expect(await tools({ search: "garden", status: "overdue" })).toEqual([]);
+  });
+
+  test("a tool's edits reach its loans, and the backfill fills older ones", async () => {
+    const s = await setup();
+    const loanId = await s.borrower.caller.mutation(api.loans.request, {
+      endDate: addDays(todayUtc(), 2),
+      startDate: addDays(todayUtc(), 1),
+      toolId: s.toolId,
+    });
+    const loan = () => s.t.run((ctx) => ctx.db.get(loanId));
+    expect(await loan()).toMatchObject({
+      toolCategory: "camping",
+      toolCondition: "good",
+      toolName: "Tent",
+    });
+
+    await s.owner.caller.mutation(api.tools.update, {
+      category: "other",
+      condition: "fair",
+      description: "",
+      name: "Two-person tent",
+      toolId: s.toolId,
+    });
+    expect(await loan()).toMatchObject({
+      toolCategory: "other",
+      toolCondition: "fair",
+      toolName: "Two-person tent",
+    });
+
+    // An older loan without the copy gets it from the backfill.
+    await s.t.run((ctx) =>
+      ctx.db.patch(loanId, {
+        toolCategory: undefined,
+        toolCondition: undefined,
+        toolName: undefined,
+      })
+    );
+    await s.t.mutation(internal.migrations.backfillLoanTools, {});
+    expect((await loan())?.toolName).toBe("Two-person tent");
+  });
+});

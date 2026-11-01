@@ -1,6 +1,7 @@
 "use client";
 
 import { usePaginatedQuery } from "convex/react";
+import type { FunctionArgs } from "convex/server";
 import { useSearchParams } from "next/navigation";
 import {
   LoanStatusBadge,
@@ -18,6 +19,7 @@ import { formatRange } from "@/lib/dates";
 import { api } from "../../../convex/_generated/api";
 import { LOAN_STATUSES, type LoanStatus } from "../../../convex/lib/validators";
 import { ADMIN_PAGE_SIZE, TableState } from "./table-state";
+import { ToolFilterControls, useToolFilters } from "./tool-filters";
 import { UrlFilter } from "./url-filter";
 
 const ALL = "all";
@@ -37,18 +39,32 @@ const FILTER_OPTIONS = [
   { label: "Overdue", value: OVERDUE },
 ] as const;
 
-/** Every loan, filtered by the URL's ?status (including "overdue"). */
+const BASE_PATH = "/admin/loans";
+
+/**
+ * Every loan, filtered by the URL's ?status (including "overdue"), ?q (the
+ * borrowed tool's name), ?category and ?condition.
+ */
 export function AdminLoans() {
   const status = parseFilter(useSearchParams().get("status"));
+  const { filters: toolFilters, isFiltered } = useToolFilters();
+  const filtered = Boolean(status) || isFiltered;
   return (
     <div className="space-y-4">
-      <UrlFilter<LoanFilter | typeof ALL>
-        basePath="/admin/loans"
-        defaultValue={ALL}
-        options={FILTER_OPTIONS}
-        value={status ?? ALL}
+      <ToolFilterControls
+        basePath={BASE_PATH}
+        extra={
+          <UrlFilter<LoanFilter | typeof ALL>
+            basePath={BASE_PATH}
+            defaultValue={ALL}
+            options={FILTER_OPTIONS}
+            value={status ?? ALL}
+          />
+        }
+        filtered={filtered}
+        searchLabel="Search loans by tool name"
       />
-      <LoanTable status={status} />
+      <LoanTable filters={{ ...toolFilters, status }} />
     </div>
   );
 }
@@ -60,17 +76,15 @@ export function LatestLoans() {
 
 /** `preview` shows the first few rows and leaves paging to the full page. */
 function LoanTable({
-  status,
+  filters = {},
   preview = false,
 }: {
-  status?: LoanFilter;
+  filters?: Omit<FunctionArgs<typeof api.admin.listLoans>, "paginationOpts">;
   preview?: boolean;
 }) {
-  const loans = usePaginatedQuery(
-    api.admin.listLoans,
-    { status },
-    { initialNumItems: preview ? PREVIEW_ROWS : ADMIN_PAGE_SIZE }
-  );
+  const loans = usePaginatedQuery(api.admin.listLoans, filters, {
+    initialNumItems: preview ? PREVIEW_ROWS : ADMIN_PAGE_SIZE,
+  });
 
   return (
     <TableState empty="No loans match." query={loans} showLoadMore={!preview}>
