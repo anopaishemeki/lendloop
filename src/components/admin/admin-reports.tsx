@@ -22,11 +22,15 @@ import {
 import { useToastAction } from "@/lib/use-toast-action";
 import { api } from "../../../convex/_generated/api";
 import {
+  REPORT_REASONS,
   REPORT_STATUSES,
+  type ReportReason,
   type ReportStatus,
 } from "../../../convex/lib/validators";
 import { ADMIN_PAGE_SIZE, TableState } from "./table-state";
+import { ToolFilterControls, useToolFilters } from "./tool-filters";
 import { UrlFilter } from "./url-filter";
+import { filterOptions, useEnumParam } from "./use-url-param";
 
 type ReportRow = FunctionReturnType<
   typeof api.admin.listReports
@@ -76,25 +80,62 @@ function ReportActions({ report }: { report: ReportRow }) {
   );
 }
 
-/** The report queue, filtered by the URL's ?status (open by default). */
+const BASE_PATH = "/admin/reports";
+const REASON_OPTIONS = filterOptions(
+  "Any reason",
+  REPORT_REASONS,
+  (value) => REPORT_REASON_LABELS[value]
+);
+
+/**
+ * The report queue: open by default, filtered by the URL's ?status, ?reason,
+ * ?q (the reported tool's name), ?category and ?condition.
+ */
 export function AdminReports() {
-  const filter = parseFilter(useSearchParams().get("status"));
+  const params = useSearchParams();
+  const filter = parseFilter(params.get("status"));
+  const reason = useEnumParam("reason", REPORT_REASONS);
+  const { filters: toolFilters, isFiltered } = useToolFilters();
+  const filtered = filter !== "open" || Boolean(reason) || isFiltered;
   const reports = usePaginatedQuery(
     api.admin.listReports,
-    { status: filter === ALL ? undefined : filter },
+    {
+      ...toolFilters,
+      reason,
+      status: filter === ALL ? undefined : filter,
+    },
     { initialNumItems: ADMIN_PAGE_SIZE }
   );
 
   return (
     <div className="space-y-4">
-      <UrlFilter<ReportFilter>
-        basePath="/admin/reports"
-        defaultValue="open"
-        options={FILTER_OPTIONS}
-        value={filter}
+      <ToolFilterControls
+        basePath={BASE_PATH}
+        extra={
+          <>
+            <UrlFilter<ReportFilter>
+              basePath={BASE_PATH}
+              defaultValue="open"
+              options={FILTER_OPTIONS}
+              value={filter}
+            />
+            <UrlFilter<ReportReason | typeof ALL>
+              basePath={BASE_PATH}
+              defaultValue={ALL}
+              label="Filter by reason"
+              options={REASON_OPTIONS}
+              param="reason"
+              value={reason ?? ALL}
+            />
+          </>
+        }
+        filtered={filtered}
+        searchLabel="Search reports by tool name"
       />
       <TableState
-        empty={filter === "open" ? "No open reports." : "No reports match."}
+        empty={
+          filtered ? "No reports match these filters." : "No open reports."
+        }
         query={reports}
       >
         {(rows) => (
