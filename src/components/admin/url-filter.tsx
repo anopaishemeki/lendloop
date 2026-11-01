@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
 import {
   Select,
   SelectContent,
@@ -8,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useUrlParam } from "./use-url-param";
 
 /**
  * A filter kept in the URL (?status=… by default), so overview links and
@@ -30,18 +30,9 @@ export function UrlFilter<T extends string>({
   param?: string;
   value: T;
 }) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  // Only this filter's param changes; any others in the URL are kept.
-  const select = (next: string) => {
-    const params = new URLSearchParams(searchParams);
-    if (next === defaultValue) params.delete(param);
-    else params.set(param, next);
-    const query = params.toString();
-    router.replace(query ? `${basePath}?${query}` : basePath, {
-      scroll: false,
-    });
-  };
+  const { set } = useUrlParam(basePath, param);
+  // The default option drops the param.
+  const select = (next: string) => set(next === defaultValue ? "" : next);
   return (
     <Select onValueChange={select} value={value}>
       <SelectTrigger aria-label={label} className="w-48">
