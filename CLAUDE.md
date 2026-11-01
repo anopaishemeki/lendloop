@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-LendLoop is a neighborhood tool-lending board: Next.js 16 (App Router), strict TypeScript, Clerk, Convex, n8n (Cloud; self-hosted also works) and Resend (email sent from n8n). `README.md` holds the full spec and design decisions; `n8n/README.md` covers workflow import and node-by-node configuration.
+LendLoop is a neighborhood tool-lending board: Next.js 16 (App Router), strict TypeScript, Clerk, Convex, n8n (Cloud; self-hosted also works) and Resend (user email sent from n8n; ops alerts sent from Convex). `README.md` holds the full spec and design decisions; `n8n/README.md` covers workflow import and node-by-node configuration.
 
 ## Working rules
 
@@ -14,6 +14,7 @@ LendLoop is a neighborhood tool-lending board: Next.js 16 (App Router), strict T
 - Run the full local gate before pushing: `npm run lint && npm run typecheck && npm test && npm run check:n8n && npm run build`.
 - Then push, `gh pr create`, wait for CI, `gh pr merge --squash --delete-branch`, and pull `main`.
 - The Bash tool mangles backslashes and apostrophes in heredocs. Write files with Write/Edit (or a Python script file).
+- Keep Convex changes backward compatible (new args and fields optional): the live Vercel app uses the dev deployment, and `npx convex dev` reaches it before the frontend that expects a breaking change is deployed. After each merge, push Convex again from `main`.
 
 ## Commands
 
@@ -33,6 +34,7 @@ npm run sync:n8n            # copy n8n/snippets/*.js into the Code nodes that ma
 npx convex run notifications:redriveFailed # resend failed n8n notification events
 npx convex run seed:demo    # demo data (seed:removeDemo undoes it; seed:removeE2E clears e2e leftovers)
 npx convex run loans:setNote '{"loanId":"…","note":"…"}'   # correct a loan note (no in-app edit)
+npx convex run migrations:backfillToolCopies   # one-off backfills; full list in README "Maintenance commands"
 ```
 
 ## Architecture
@@ -42,6 +44,10 @@ npx convex run loans:setNote '{"loanId":"…","note":"…"}'   # correct a loan 
 **Route groups.** `src/app/(app)` is the signed-in app (header nav, `/tools`, `/my/*`). `src/app/(admin)/admin` is the admin portal: `AdminShell` (sidebar + outlet) with Overview, Loans, Listings, Reports, Neighbors and Automation pages backed by `convex/admin.ts`.
 
 **Business rules live in Convex, not React.** Every query and mutation starts with a guard from `convex/auth.ts` (`requireViewer`, `requireAdmin`, `assertToolOwner`, `assertLoanParty`, …). Errors are thrown as `ConvexError({ code, message })` via `fail()` so the UI can show toasts. Always import `mutation`/`internalMutation` from `convex/functions.ts`, never `./_generated/server` (lint enforces it): the wrapper runs triggers that keep the admin overview counters in `convex/lib/counters.ts` current. `newTest()` makes `t.run` writes update the counters too. Queries return server-computed action flags (`canApprove`, `canCancel`, …) that the UI only renders. The public landing-page query's `returns` validator only lets `{name, category}` through, so keep data minimization in mind when touching it.
+
+**Copies of tool fields.** Loans and reports keep a copy of their tool's name, category and condition (`toolFieldsOf` in `convex/lib/tools.ts`) so admin filters can page on the server. A trigger on `tools` (`syncToolCopies`, registered in `convex/functions.ts`) refreshes the copies whenever those fields change; set them on any new loan or report insert.
+
+**Reports, limits, alerts.** Listing reports live in `convex/reports.ts`; removing a listing goes through `removeListing` (`convex/lib/listings.ts`), which closes open reports only when an admin removes it. Per-user rate limits are in `convex/lib/limits.ts` (`enforceRateLimit`, after validation; admins exempt). Failed deliveries and reminders insert `pendingAlerts` rows (`convex/lib/alerts.ts`), emailed in one batch every 5 minutes by `convex/alerts.ts` through Resend.
 
 **Loans.** The state machine is in `convex/lib/loans.ts`. **Only `transitionLoan` changes a loan's status**, and it also writes the notification outbox row and enqueues delivery. Dates are UTC calendar days (`YYYY-MM-DD`). Overdue is derived (approved and past its end date), never stored, and overdue loans keep blocking availability until returned. Approving a request declines overlapping pending requests in the same transaction. Removing a tool is a soft delete.
 
@@ -53,7 +59,7 @@ npx convex run loans:setNote '{"loanId":"…","note":"…"}'   # correct a loan 
 
 ## Testing
 
-Convex specs use convex-test through `newTest()` in `convex/test.setup.ts`, which registers the workpool component. Use `t.withIdentity(identityFor("alice", "admin"))` to act as a user; `identityFor` mirrors the Clerk `metadata` claim. The `import.meta.glob("./**/*.*s")` pattern there must not change.
+Convex specs use convex-test through `newTest()` in `convex/test.setup.ts`, which registers the workpool, rate-limiter and aggregate components. Use `t.withIdentity(identityFor("alice", "admin"))` to act as a user; `identityFor` mirrors the Clerk `metadata` claim. The `import.meta.glob("./**/*.*s")` pattern there must not change.
 
 End-to-end specs (`tests/e2e`, Playwright + `@clerk/testing`) sign in as three Clerk users created by `global-setup.ts` and write to the dev (staging) deployment; keep each run self-cleaning (fresh listing name, removed in `afterAll`).
 
