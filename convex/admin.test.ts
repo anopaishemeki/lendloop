@@ -450,3 +450,33 @@ describe("automationOutcomes", () => {
     ).toMatchObject({ remindersFailedThisWeek: 1, remindersSentThisWeek: 1 });
   });
 });
+
+describe("listTools condition filter", () => {
+  test("narrows live listings to one condition", async () => {
+    const s = await setup();
+    const add = (name: string, condition: "new" | "worn") =>
+      s.owner.caller.mutation(api.tools.create, {
+        category: "garden",
+        condition,
+        description: "",
+        name,
+      });
+    await add("Spade", "worn");
+    const goneId = await add("Rake", "worn");
+    await add("Hose", "new");
+    await s.owner.caller.mutation(api.tools.remove, { toolId: goneId });
+
+    const names = async (condition?: "new" | "worn" | "good") =>
+      (
+        await s.admin.caller.query(api.admin.listTools, {
+          condition,
+          paginationOpts: PAGE,
+        })
+      ).page.map((tool) => tool.name);
+    expect(await names("worn")).toEqual(["Spade"]);
+    expect(await names("new")).toEqual(["Hose"]);
+    // setup() lists one tool in good condition.
+    expect(await names("good")).toEqual(["Tent"]);
+    expect(await names()).toHaveLength(3);
+  });
+});

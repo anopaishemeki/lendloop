@@ -18,7 +18,7 @@ import { formatRange } from "@/lib/dates";
 import { api } from "../../../convex/_generated/api";
 import { LOAN_STATUSES, type LoanStatus } from "../../../convex/lib/validators";
 import { ADMIN_PAGE_SIZE, TableState } from "./table-state";
-import { UrlStatusFilter } from "./url-status-filter";
+import { UrlFilter } from "./url-filter";
 
 const ALL = "all";
 const OVERDUE = "overdue";
@@ -42,7 +42,7 @@ export function AdminLoans() {
   const status = parseFilter(useSearchParams().get("status"));
   return (
     <div className="space-y-4">
-      <UrlStatusFilter<LoanFilter | typeof ALL>
+      <UrlFilter<LoanFilter | typeof ALL>
         basePath="/admin/loans"
         defaultValue={ALL}
         options={FILTER_OPTIONS}

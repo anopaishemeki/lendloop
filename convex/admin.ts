@@ -130,16 +130,27 @@ export const listLoans = query({
   returns: paginationResultValidator(adminLoanView),
 });
 
-/** All live listings, newest first, so an admin can remove any via tools.remove. */
+/**
+ * All live listings, newest first, optionally of one condition, so an admin
+ * can remove any via tools.remove.
+ */
 export const listTools = query({
-  args: { paginationOpts: paginationOptsValidator },
-  handler: async (ctx, { paginationOpts }) => {
+  args: {
+    condition: v.optional(conditionValidator),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, { condition, paginationOpts }) => {
     await requireAdmin(ctx);
-    const result = await ctx.db
-      .query("tools")
-      .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined))
-      .order("desc")
-      .paginate(paginationOpts);
+    const live = condition
+      ? ctx.db
+          .query("tools")
+          .withIndex("by_condition_and_removed_at", (q) =>
+            q.eq("condition", condition).eq("removedAt", undefined)
+          )
+      : ctx.db
+          .query("tools")
+          .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined));
+    const result = await live.order("desc").paginate(paginationOpts);
     const today = todayUtc();
     const get = cachedGet(ctx);
     return await mapPage(result, async (tool) => {

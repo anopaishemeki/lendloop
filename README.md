@@ -39,7 +39,7 @@ A neighborhood tool-lending board. Neighbors list tools they're happy to lend, r
 - **Admin portal** (`/admin`): its own layout with a sidebar, and one page per job:
   - **Overview:** neighbors, live listings, open reports, pending loans, overdue loans and failed notifications, each linking to the page that deals with it; loans by status; automation health; the latest loans.
   - **Loans:** every loan with a status filter (the overview cards link here pre-filtered).
-  - **Listings:** remove any listing.
+  - **Listings:** every live listing with its category, condition, lender and availability, filterable by condition (kept in the URL); remove any listing.
   - **Reports:** the report queue (open by default, filterable by status). **Remove** takes the listing down and closes every open report about it (as does removing it from Listings); **Dismiss** closes one report. A lender removing their own listing leaves its reports open, marked "Removed by the lender", so an admin still sees them.
   - **Neighbors:** mark lenders as Trusted Lender.
   - **Automation:** a two-week chart of sent and failed deliveries and reminders per day; every request-notification delivery with its status, attempts and last error, a **Retry failed** button; and the overdue-reminder log.

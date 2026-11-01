@@ -26,7 +26,7 @@ import {
   type ReportStatus,
 } from "../../../convex/lib/validators";
 import { ADMIN_PAGE_SIZE, TableState } from "./table-state";
-import { UrlStatusFilter } from "./url-status-filter";
+import { UrlFilter } from "./url-filter";
 
 type ReportRow = FunctionReturnType<
   typeof api.admin.listReports
@@ -87,7 +87,7 @@ export function AdminReports() {
 
   return (
     <div className="space-y-4">
-      <UrlStatusFilter<ReportFilter>
+      <UrlFilter<ReportFilter>
         basePath="/admin/reports"
         defaultValue="open"
         options={FILTER_OPTIONS}
