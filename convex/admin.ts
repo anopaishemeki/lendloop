@@ -23,6 +23,7 @@ import { redriveFailedDeliveries } from "./lib/notifications";
 import { isTrustedLender } from "./lib/users";
 import {
   categoryValidator,
+  conditionValidator,
   deliveryStatusValidator,
   LOAN_STATUSES,
   type LoanStatus,
@@ -63,6 +64,7 @@ const adminToolView = v.object({
   _id: v.id("tools"),
   availability: availabilityValidator,
   category: categoryValidator,
+  condition: conditionValidator,
   name: v.string(),
   owner: adminPersonView,
 });
@@ -149,6 +151,7 @@ export const listTools = query({
         _id: tool._id,
         availability,
         category: tool.category,
+        condition: tool.condition,
         name: tool.name,
         owner: adminPerson(owner),
       };

@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CATEGORY_LABELS } from "@/lib/tool-labels";
+import { CATEGORY_LABELS, CONDITION_LABELS } from "@/lib/tool-labels";
 import { api } from "../../../convex/_generated/api";
 import { ADMIN_PAGE_SIZE, TableState } from "./table-state";
 
@@ -31,6 +31,7 @@ export function AdminTools() {
             <TableRow>
               <TableHead>Tool</TableHead>
               <TableHead>Category</TableHead>
+              <TableHead>Condition</TableHead>
               <TableHead>Lender</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="sr-only">Actions</TableHead>
@@ -46,6 +47,7 @@ export function AdminTools() {
                   </span>
                 </TableCell>
                 <TableCell>{CATEGORY_LABELS[tool.category]}</TableCell>
+                <TableCell>{CONDITION_LABELS[tool.condition]}</TableCell>
                 <TableCell>
                   <NameWithBadge isTrustedLender={tool.owner.isTrustedLender}>
                     {tool.owner.name}
