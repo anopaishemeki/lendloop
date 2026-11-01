@@ -35,7 +35,7 @@ export function UrlFilter<T extends string>({
   const select = (next: string) => set(next === defaultValue ? "" : next);
   return (
     <Select onValueChange={select} value={value}>
-      <SelectTrigger aria-label={label} className="w-48">
+      <SelectTrigger aria-label={label} className="w-auto min-w-48">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
