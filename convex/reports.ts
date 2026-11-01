@@ -4,6 +4,7 @@ import { mutation } from "./functions";
 import { getActiveTool } from "./lib/db";
 import { enforceRateLimit } from "./lib/limits";
 import { cleanText } from "./lib/text";
+import { toolFieldsOf } from "./lib/tools";
 import { REPORT_DETAILS_MAX, reportReasonValidator } from "./lib/validators";
 
 /** A neighbor flags a listing for the admins, once per listing. */
@@ -36,6 +37,7 @@ export const create = mutation({
       reporterId: viewer.user._id,
       status: "open",
       toolId,
+      ...toolFieldsOf(tool),
       ...(cleanDetails ? { details: cleanDetails } : {}),
     });
     return null;

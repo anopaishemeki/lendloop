@@ -30,11 +30,11 @@ import {
   blockedRange,
   isOverdue,
   loansForTool,
-  toolFieldsOf,
   transitionLoan,
 } from "./lib/loans";
 import { enqueueNotification } from "./lib/notifications";
 import { cleanText } from "./lib/text";
+import { toolFieldsOf } from "./lib/tools";
 import { publicProfile } from "./lib/users";
 import {
   type BoardSection,
