@@ -1,4 +1,5 @@
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Trigger } from "convex-helpers/server/triggers";
+import type { DataModel, Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { fail } from "../auth";
 import { isOnLoan } from "./availability";
@@ -30,6 +31,45 @@ export function loansForTool(
     )
     .collect();
 }
+
+/** The tool fields a loan keeps a copy of, for admin search and filters. */
+export function toolFieldsOf(
+  tool: Pick<Doc<"tools">, "name" | "category" | "condition">
+) {
+  return {
+    toolCategory: tool.category,
+    toolCondition: tool.condition,
+    toolName: tool.name,
+  };
+}
+
+/**
+ * Trigger on tools: when a tool's name, category or condition changes (by any
+ * write path), refresh the copy its loans keep. Registered in convex/functions.ts.
+ */
+export const syncLoanToolFields: Trigger<
+  MutationCtx,
+  DataModel,
+  "tools"
+> = async (ctx, { newDoc, oldDoc }) => {
+  if (!(oldDoc && newDoc)) return;
+  const fields = toolFieldsOf(newDoc);
+  const before = toolFieldsOf(oldDoc);
+  if (
+    fields.toolName === before.toolName &&
+    fields.toolCategory === before.toolCategory &&
+    fields.toolCondition === before.toolCondition
+  ) {
+    return;
+  }
+  const loans = await ctx.db
+    .query("loans")
+    .withIndex("by_tool_and_status_and_start_date", (q) =>
+      q.eq("toolId", newDoc._id)
+    )
+    .collect();
+  await Promise.all(loans.map((loan) => ctx.db.patch(loan._id, fields)));
+};
 
 /** Approved loans past their end date, oldest end date first. */
 export function overdueLoans(ctx: QueryCtx, today: string) {

@@ -30,6 +30,7 @@ import {
   blockedRange,
   isOverdue,
   loansForTool,
+  toolFieldsOf,
   transitionLoan,
 } from "./lib/loans";
 import { enqueueNotification } from "./lib/notifications";
@@ -284,6 +285,7 @@ export const request = mutation({
       startDate,
       status: "requested",
       toolId,
+      ...toolFieldsOf(tool),
       ...(cleanNote ? { note: cleanNote } : {}),
     });
     await enqueueNotification(ctx, loanId, "request.created", tool.ownerId);

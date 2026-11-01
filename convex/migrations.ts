@@ -8,7 +8,8 @@ import {
   type CountedTable,
   reminderCounts,
 } from "./lib/counters";
-import { isClosedStatus } from "./lib/loans";
+import { cachedGet } from "./lib/db";
+import { isClosedStatus, toolFieldsOf } from "./lib/loans";
 
 /**
  * One-off backfill of `closedAt` for loans that closed before the field
@@ -114,6 +115,37 @@ export const rebuildReminderCounts = internalMutation({
       before: Date.now(),
       tableIndex: COUNTED_TABLES.indexOf("reminders"),
     });
+    return null;
+  },
+  returns: v.null(),
+});
+
+/**
+ * Copies each tool's name, category and condition onto its loans, for loans
+ * created before loans kept that copy (admin loan search and filters). Pages
+ * through the table and reschedules itself; safe to re-run.
+ *   npx convex run migrations:backfillLoanTools
+ */
+export const backfillLoanTools = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, { cursor = null }) => {
+    const { continueCursor, isDone, page } = await ctx.db
+      .query("loans")
+      .paginate({ cursor, numItems: 100 });
+    const get = cachedGet(ctx);
+    await Promise.all(
+      page
+        .filter((loan) => loan.toolName === undefined)
+        .map(async (loan) => {
+          const tool = await get(loan.toolId);
+          if (tool) await ctx.db.patch(loan._id, toolFieldsOf(tool));
+        })
+    );
+    if (!isDone) {
+      await ctx.scheduler.runAfter(0, internal.migrations.backfillLoanTools, {
+        cursor: continueCursor,
+      });
+    }
     return null;
   },
   returns: v.null(),

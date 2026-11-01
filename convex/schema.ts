@@ -24,7 +24,13 @@ export default defineSchema({
     returnedAt: v.optional(v.number()),
     startDate: v.string(),
     status: loanStatusValidator,
+    // Copies of the tool's name, category and condition so admins can search
+    // and filter loans by them (kept in step by tools.update; filled for older
+    // loans by migrations:backfillLoanTools).
+    toolCategory: v.optional(categoryValidator),
+    toolCondition: v.optional(conditionValidator),
     toolId: v.id("tools"),
+    toolName: v.optional(v.string()),
   })
     // A person's closed loans, most recently closed first (board history).
     .index("by_owner_closed", ["ownerId", "closedAt"])
@@ -37,6 +43,10 @@ export default defineSchema({
     .index("by_owner_status_end", ["ownerId", "status", "endDate"])
     .index("by_status", ["status"])
     .index("by_status_and_end_date", ["status", "endDate"])
+    .searchIndex("search_tool_name", {
+      filterFields: ["status", "toolCategory", "toolCondition"],
+      searchField: "toolName",
+    })
     .index("by_tool_and_status_and_start_date", [
       "toolId",
       "status",
