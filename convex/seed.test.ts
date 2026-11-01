@@ -46,7 +46,12 @@ describe("seed:demo", () => {
 
     // Seeding sends nothing: every email row is already sent, nothing queued.
     const health = await admin.query(api.admin.automationHealth, {});
-    expect(health).toMatchObject({ failed: 0, queued: 0 });
+    expect(health).toMatchObject({
+      failed: 0,
+      queued: 0,
+      remindersFailedThisWeek: 1,
+      remindersSentThisWeek: 5,
+    });
   });
 
   test("every seeded loan's emails are in order, request first", async () => {

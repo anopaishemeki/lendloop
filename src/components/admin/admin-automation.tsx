@@ -203,7 +203,10 @@ function Reminders() {
           Overdue reminders
         </h2>
         <p className="text-muted-foreground text-sm">
-          Written back by the hourly n8n runs, at most one per loan per day.
+          Written back by the hourly n8n runs (08:00–17:00 UTC), at most one per
+          loan per day. There's nothing to retry by hand: a failed reminder is
+          tried again at the next hourly run that day, and a new one goes out
+          each day the loan stays overdue.
         </p>
       </div>
       <TableState empty="No reminders have been sent yet." query={rows}>

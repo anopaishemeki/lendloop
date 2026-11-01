@@ -251,7 +251,12 @@ describe("admin portal", () => {
     // The request and the approval are both waiting for the workpool.
     expect(
       await s.admin.caller.query(api.admin.automationHealth, {})
-    ).toMatchObject({ failed: 0, queued: 2, remindersThisWeek: 0 });
+    ).toMatchObject({
+      failed: 0,
+      queued: 2,
+      remindersFailedThisWeek: 0,
+      remindersSentThisWeek: 0,
+    });
   });
 
   test("filters loans down to the overdue ones", async () => {
@@ -438,10 +443,9 @@ describe("automationOutcomes", () => {
     ]);
     const quiet = [...deliveries.slice(0, -2), ...reminders.slice(0, -2)];
     expect(quiet.every((d) => d.sent + d.failed === 0)).toBe(true);
-    // The overview's weekly figure counts every reminder, sent or failed.
+    // The overview counts this week's reminders by outcome, so failures show.
     expect(
-      (await s.admin.caller.query(api.admin.automationHealth, {}))
-        .remindersThisWeek
-    ).toBe(2);
+      await s.admin.caller.query(api.admin.automationHealth, {})
+    ).toMatchObject({ remindersFailedThisWeek: 1, remindersSentThisWeek: 1 });
   });
 });

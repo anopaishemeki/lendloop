@@ -131,7 +131,34 @@ export function AdminOverview() {
   }
 
   const totalLoans = LOAN_STATUSES.reduce((sum, s) => sum + stats.loans[s], 0);
-  const { failed } = health;
+  const { failed, remindersFailedThisWeek: reminderFailures } = health;
+  const failedNotificationsHint = () => {
+    if (failed > 0) return "Retry them from Automation";
+    if (reminderFailures > 0) {
+      return `${reminderFailures} overdue reminder${reminderFailures === 1 ? "" : "s"} failed this week; retried automatically`;
+    }
+    return "Every email delivered";
+  };
+  const tiles: { label: string; value: number; note?: string }[] = [
+    {
+      label: "Notifications delivered, last 7 days",
+      value: health.deliveredThisWeek,
+    },
+    { label: "Notifications queued or retrying", value: health.queued },
+    {
+      label: "Notifications failed",
+      note: failed > 0 ? "Retry from Automation" : undefined,
+      value: failed,
+    },
+    {
+      label: "Overdue reminders sent, last 7 days",
+      note:
+        reminderFailures > 0
+          ? `${reminderFailures} failed, retried automatically`
+          : undefined,
+      value: health.remindersSentThisWeek,
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -172,9 +199,7 @@ export function AdminOverview() {
           value={stats.overdue.toLocaleString()}
         />
         <StatCard
-          hint={
-            failed > 0 ? "Retry them from Automation" : "Every email delivered"
-          }
+          hint={failedNotificationsHint()}
           href="/admin/automation"
           icon={failed > 0 ? CircleAlert : BadgeCheck}
           label="Failed notifications"
@@ -204,19 +229,15 @@ export function AdminOverview() {
           title="Automation health"
         >
           <dl className="grid grid-cols-2 gap-4 text-sm">
-            {(
-              [
-                ["Delivered, last 7 days", health.deliveredThisWeek],
-                ["Queued or retrying", health.queued],
-                ["Failed", failed],
-                ["Reminders, last 7 days", health.remindersThisWeek],
-              ] as const
-            ).map(([label, value]) => (
+            {tiles.map(({ label, note, value }) => (
               <div className="bg-muted/60 rounded-xl p-3" key={label}>
                 <dt className="text-muted-foreground">{label}</dt>
                 <dd className="font-display mt-1 text-2xl font-semibold tabular-nums">
                   {value.toLocaleString()}
                 </dd>
+                {note ? (
+                  <dd className="text-destructive mt-0.5 text-xs">{note}</dd>
+                ) : null}
               </div>
             ))}
           </dl>
