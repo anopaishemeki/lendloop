@@ -33,6 +33,8 @@ import {
   reminderStatusValidator,
   reportReasonValidator,
   reportStatusValidator,
+  type ToolCategory,
+  type ToolCondition,
 } from "./lib/validators";
 
 // Admins see full names (not just first names) so they can tell people apart.
@@ -130,27 +132,68 @@ export const listLoans = query({
   returns: paginationResultValidator(adminLoanView),
 });
 
+/** Live listings for the admin table: by name match, else newest first. */
+function liveListings(
+  ctx: QueryCtx,
+  {
+    category,
+    condition,
+    search,
+  }: { category?: ToolCategory; condition?: ToolCondition; search?: string }
+) {
+  const text = search?.trim();
+  if (text) {
+    return ctx.db.query("tools").withSearchIndex("search_name", (q) => {
+      const live = q.search("name", text).eq("removedAt", undefined);
+      const inCategory = category ? live.eq("category", category) : live;
+      return condition ? inCategory.eq("condition", condition) : inCategory;
+    });
+  }
+  // The narrowest index for the filters given, newest first.
+  const tools = ctx.db.query("tools");
+  if (category && condition) {
+    return tools
+      .withIndex("by_category_condition_removed", (q) =>
+        q
+          .eq("category", category)
+          .eq("condition", condition)
+          .eq("removedAt", undefined)
+      )
+      .order("desc");
+  }
+  if (category) {
+    return tools
+      .withIndex("by_category_and_removed_at", (q) =>
+        q.eq("category", category).eq("removedAt", undefined)
+      )
+      .order("desc");
+  }
+  if (condition) {
+    return tools
+      .withIndex("by_condition_and_removed_at", (q) =>
+        q.eq("condition", condition).eq("removedAt", undefined)
+      )
+      .order("desc");
+  }
+  return tools
+    .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined))
+    .order("desc");
+}
+
 /**
- * All live listings, newest first, optionally of one condition, so an admin
- * can remove any via tools.remove.
+ * Live listings, filterable by name, category and condition, so an admin can
+ * find and remove any via tools.remove.
  */
 export const listTools = query({
   args: {
+    category: v.optional(categoryValidator),
     condition: v.optional(conditionValidator),
     paginationOpts: paginationOptsValidator,
+    search: v.optional(v.string()),
   },
-  handler: async (ctx, { condition, paginationOpts }) => {
+  handler: async (ctx, { paginationOpts, ...filters }) => {
     await requireAdmin(ctx);
-    const live = condition
-      ? ctx.db
-          .query("tools")
-          .withIndex("by_condition_and_removed_at", (q) =>
-            q.eq("condition", condition).eq("removedAt", undefined)
-          )
-      : ctx.db
-          .query("tools")
-          .withIndex("by_removed_at", (q) => q.eq("removedAt", undefined));
-    const result = await live.order("desc").paginate(paginationOpts);
+    const result = await liveListings(ctx, filters).paginate(paginationOpts);
     const today = todayUtc();
     const get = cachedGet(ctx);
     return await mapPage(result, async (tool) => {

@@ -451,32 +451,58 @@ describe("automationOutcomes", () => {
   });
 });
 
-describe("listTools condition filter", () => {
-  test("narrows live listings to one condition", async () => {
+describe("listTools filters", () => {
+  test("narrows live listings by name, category and condition", async () => {
     const s = await setup();
-    const add = (name: string, condition: "new" | "worn") =>
+    const add = (
+      name: string,
+      category: "garden" | "kitchen",
+      condition: "new" | "worn"
+    ) =>
       s.owner.caller.mutation(api.tools.create, {
-        category: "garden",
+        category,
         condition,
         description: "",
         name,
       });
-    await add("Spade", "worn");
-    const goneId = await add("Rake", "worn");
-    await add("Hose", "new");
+    await add("Garden spade", "garden", "worn");
+    const goneId = await add("Garden rake", "garden", "worn");
+    await add("Garden hose", "garden", "new");
+    await add("Bread maker", "kitchen", "new");
     await s.owner.caller.mutation(api.tools.remove, { toolId: goneId });
 
-    const names = async (condition?: "new" | "worn" | "good") =>
+    const names = async (filters: {
+      category?: "garden" | "kitchen";
+      condition?: "new" | "worn";
+      search?: string;
+    }) =>
       (
         await s.admin.caller.query(api.admin.listTools, {
-          condition,
+          ...filters,
           paginationOpts: PAGE,
         })
-      ).page.map((tool) => tool.name);
-    expect(await names("worn")).toEqual(["Spade"]);
-    expect(await names("new")).toEqual(["Hose"]);
-    // setup() lists one tool in good condition.
-    expect(await names("good")).toEqual(["Tent"]);
-    expect(await names()).toHaveLength(3);
+      ).page
+        .map((tool) => tool.name)
+        .sort();
+    // setup() also lists a camping tent in good condition.
+    expect(await names({})).toEqual([
+      "Bread maker",
+      "Garden hose",
+      "Garden spade",
+      "Tent",
+    ]);
+    expect(await names({ condition: "worn" })).toEqual(["Garden spade"]);
+    expect(await names({ category: "kitchen" })).toEqual(["Bread maker"]);
+    expect(await names({ category: "garden", condition: "new" })).toEqual([
+      "Garden hose",
+    ]);
+    expect(await names({ search: "garden" })).toEqual([
+      "Garden hose",
+      "Garden spade",
+    ]);
+    expect(await names({ condition: "new", search: "garden" })).toEqual([
+      "Garden hose",
+    ]);
+    expect(await names({ search: "   " })).toHaveLength(4);
   });
 });

@@ -103,6 +103,16 @@ export default defineSchema({
   })
     .index("by_owner_and_removed_at", ["ownerId", "removedAt"])
     .index("by_condition_and_removed_at", ["condition", "removedAt"])
+    .index("by_category_condition_removed", [
+      "category",
+      "condition",
+      "removedAt",
+    ])
+    // Admin listing search by name, narrowed by the same filters.
+    .searchIndex("search_name", {
+      filterFields: ["removedAt", "category", "condition"],
+      searchField: "name",
+    })
     .index("by_category_and_removed_at", ["category", "removedAt"])
     .index("by_removed_at", ["removedAt"]),
 
