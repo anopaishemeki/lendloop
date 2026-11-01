@@ -3,17 +3,9 @@
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { formatDistanceToNow } from "date-fns";
 import { RotateCw } from "lucide-react";
-import { useState } from "react";
 import { NameWithBadge } from "@/components/trusted-lender-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   TableBody,
   TableCell,
@@ -29,11 +21,15 @@ import { api } from "../../../convex/_generated/api";
 import {
   DELIVERY_STATUSES,
   type DeliveryStatus,
+  NOTIFICATION_EVENTS,
+  type NotificationEvent,
+  REMINDER_STATUSES,
+  type ReminderStatus,
 } from "../../../convex/lib/validators";
 import { AutomationOutcomes } from "./automation-outcomes";
 import { ADMIN_PAGE_SIZE, TableState } from "./table-state";
-
-const ALL = "all";
+import { UrlFilter } from "./url-filter";
+import { ALL, filterOptions, useEnumParam } from "./use-url-param";
 
 const STATUS_TONE: Record<DeliveryStatus, string> = {
   failed: STATUS_TONES.bad,
@@ -92,11 +88,29 @@ function RetryFailed() {
   );
 }
 
+const BASE_PATH = "/admin/automation";
+const DELIVERY_OPTIONS = filterOptions(
+  "All deliveries",
+  DELIVERY_STATUSES,
+  (value) => FILTER_LABELS[value]
+);
+const EMAIL_OPTIONS = filterOptions(
+  "Every email",
+  NOTIFICATION_EVENTS,
+  (value) => AUTOMATION_LABELS[value]
+);
+const REMINDER_OPTIONS = filterOptions(
+  "All reminders",
+  REMINDER_STATUSES,
+  (value) => FILTER_LABELS[value]
+);
+
 function Notifications() {
-  const [status, setStatus] = useState<DeliveryStatus | typeof ALL>(ALL);
+  const status = useEnumParam("delivery", DELIVERY_STATUSES);
+  const event = useEnumParam("email", NOTIFICATION_EVENTS);
   const rows = usePaginatedQuery(
     api.admin.listNotifications,
-    { status: status === ALL ? undefined : status },
+    { event, status },
     { initialNumItems: ADMIN_PAGE_SIZE }
   );
   return (
@@ -112,27 +126,22 @@ function Notifications() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Select
-            onValueChange={(value) =>
-              setStatus(value as DeliveryStatus | typeof ALL)
-            }
-            value={status}
-          >
-            <SelectTrigger
-              aria-label="Filter by delivery status"
-              className="w-40"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>All deliveries</SelectItem>
-              {DELIVERY_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {FILTER_LABELS[s]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <UrlFilter<NotificationEvent | typeof ALL>
+            basePath={BASE_PATH}
+            defaultValue={ALL}
+            label="Filter by email"
+            options={EMAIL_OPTIONS}
+            param="email"
+            value={event ?? ALL}
+          />
+          <UrlFilter<DeliveryStatus | typeof ALL>
+            basePath={BASE_PATH}
+            defaultValue={ALL}
+            label="Filter by delivery status"
+            options={DELIVERY_OPTIONS}
+            param="delivery"
+            value={status ?? ALL}
+          />
           <RetryFailed />
         </div>
       </div>
@@ -191,25 +200,41 @@ function Notifications() {
 }
 
 function Reminders() {
+  const status = useEnumParam("reminder", REMINDER_STATUSES);
   const rows = usePaginatedQuery(
     api.admin.listReminders,
-    {},
+    { status },
     { initialNumItems: ADMIN_PAGE_SIZE }
   );
   return (
     <section className="space-y-4">
-      <div>
-        <h2 className="font-display text-xl font-semibold">
-          Overdue reminders
-        </h2>
-        <p className="text-muted-foreground text-sm">
-          Written back by the hourly n8n runs (08:00–17:00 UTC), at most one per
-          loan per day. There's nothing to retry by hand: a failed reminder is
-          tried again at the next hourly run that day, and a new one goes out
-          each day the loan stays overdue.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="font-display text-xl font-semibold">
+            Overdue reminders
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            Written back by the hourly n8n runs (08:00–17:00 UTC), at most one
+            per loan per day. There's nothing to retry by hand: a failed
+            reminder is tried again at the next hourly run that day, and a new
+            one goes out each day the loan stays overdue.
+          </p>
+        </div>
+        <UrlFilter<ReminderStatus | typeof ALL>
+          basePath={BASE_PATH}
+          defaultValue={ALL}
+          label="Filter by reminder status"
+          options={REMINDER_OPTIONS}
+          param="reminder"
+          value={status ?? ALL}
+        />
       </div>
-      <TableState empty="No reminders have been sent yet." query={rows}>
+      <TableState
+        empty={
+          status ? "No reminders match." : "No reminders have been sent yet."
+        }
+        query={rows}
+      >
         {(page) => (
           <>
             <TableHeader>

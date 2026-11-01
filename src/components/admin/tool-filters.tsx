@@ -2,7 +2,6 @@
 
 import { X } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { CATEGORY_LABELS, CONDITION_LABELS } from "@/lib/tool-labels";
@@ -14,27 +13,41 @@ import {
 } from "../../../convex/lib/validators";
 import { UrlFilter } from "./url-filter";
 import { UrlSearch } from "./url-search";
+import {
+  ALL,
+  filterOptions,
+  useEnumParam,
+  useSearchText,
+} from "./use-url-param";
 
-const ANY = "all";
+const CATEGORY_OPTIONS = filterOptions(
+  "Any category",
+  TOOL_CATEGORIES,
+  (value) => CATEGORY_LABELS[value]
+);
+const CONDITION_OPTIONS = filterOptions(
+  "Any condition",
+  TOOL_CONDITIONS,
+  (value) => CONDITION_LABELS[value]
+);
 
-const CATEGORY_OPTIONS = [
-  { label: "Any category", value: ANY },
-  ...TOOL_CATEGORIES.map((value) => ({ label: CATEGORY_LABELS[value], value })),
-] as const;
-const CONDITION_OPTIONS = [
-  { label: "Any condition", value: ANY },
-  ...TOOL_CONDITIONS.map((value) => ({
-    label: CONDITION_LABELS[value],
-    value,
-  })),
-] as const;
+/** Back to the unfiltered page. */
+export function ClearFilters({ basePath }: { basePath: string }) {
+  return (
+    <Button asChild size="sm" variant="ghost">
+      <Link href={basePath} scroll={false}>
+        <X aria-hidden />
+        Clear filters
+      </Link>
+    </Button>
+  );
+}
 
 /** The tool filters in the URL: ?q (name), ?category and ?condition. */
 export function useToolFilters() {
-  const params = useSearchParams();
-  const search = params.get("q")?.trim() || undefined;
-  const category = TOOL_CATEGORIES.find((v) => v === params.get("category"));
-  const condition = TOOL_CONDITIONS.find((v) => v === params.get("condition"));
+  const search = useSearchText();
+  const category = useEnumParam("category", TOOL_CATEGORIES);
+  const condition = useEnumParam("condition", TOOL_CONDITIONS);
   return {
     filters: { category, condition, search },
     isFiltered: Boolean(search || category || condition),
@@ -67,30 +80,23 @@ export function ToolFilterControls({
         placeholder="Search by tool name"
       />
       {extra}
-      <UrlFilter<ToolCategory | typeof ANY>
+      <UrlFilter<ToolCategory | typeof ALL>
         basePath={basePath}
-        defaultValue={ANY}
+        defaultValue={ALL}
         label="Filter by category"
         options={CATEGORY_OPTIONS}
         param="category"
-        value={category ?? ANY}
+        value={category ?? ALL}
       />
-      <UrlFilter<ToolCondition | typeof ANY>
+      <UrlFilter<ToolCondition | typeof ALL>
         basePath={basePath}
-        defaultValue={ANY}
+        defaultValue={ALL}
         label="Filter by condition"
         options={CONDITION_OPTIONS}
         param="condition"
-        value={condition ?? ANY}
+        value={condition ?? ALL}
       />
-      {filtered ? (
-        <Button asChild size="sm" variant="ghost">
-          <Link href={basePath} scroll={false}>
-            <X aria-hidden />
-            Clear filters
-          </Link>
-        </Button>
-      ) : null}
+      {filtered ? <ClearFilters basePath={basePath} /> : null}
     </div>
   );
 }

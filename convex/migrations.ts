@@ -9,7 +9,8 @@ import {
   reminderCounts,
 } from "./lib/counters";
 import { cachedGet } from "./lib/db";
-import { isClosedStatus, toolFieldsOf } from "./lib/loans";
+import { isClosedStatus } from "./lib/loans";
+import { toolFieldsOf } from "./lib/tools";
 
 /**
  * One-off backfill of `closedAt` for loans that closed before the field
@@ -121,30 +122,40 @@ export const rebuildReminderCounts = internalMutation({
 });
 
 /**
- * Copies each tool's name, category and condition onto its loans, for loans
- * created before loans kept that copy (admin loan search and filters). Pages
- * through the table and reschedules itself; safe to re-run.
- *   npx convex run migrations:backfillLoanTools
+ * Copies each tool's name, category and condition onto its loans, then its
+ * reports, for rows made before they kept that copy (admin search and
+ * filters). Pages through each table and reschedules itself; safe to re-run.
+ *   npx convex run migrations:backfillToolCopies
  */
-export const backfillLoanTools = internalMutation({
-  args: { cursor: v.optional(v.union(v.string(), v.null())) },
-  handler: async (ctx, { cursor = null }) => {
+export const backfillToolCopies = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    table: v.optional(v.union(v.literal("loans"), v.literal("reports"))),
+  },
+  handler: async (ctx, { cursor = null, table = "loans" }) => {
     const { continueCursor, isDone, page } = await ctx.db
-      .query("loans")
+      .query(table)
       .paginate({ cursor, numItems: 100 });
     const get = cachedGet(ctx);
     await Promise.all(
       page
-        .filter((loan) => loan.toolName === undefined)
-        .map(async (loan) => {
-          const tool = await get(loan.toolId);
-          if (tool) await ctx.db.patch(loan._id, toolFieldsOf(tool));
+        .filter((row) => row.toolName === undefined)
+        .map(async (row) => {
+          const tool = await get(row.toolId);
+          if (tool) await ctx.db.patch(row._id, toolFieldsOf(tool));
         })
     );
-    if (!isDone) {
-      await ctx.scheduler.runAfter(0, internal.migrations.backfillLoanTools, {
-        cursor: continueCursor,
-      });
+    // Next page of this table, else the reports, else done.
+    let next: { cursor: string | null; table: "loans" | "reports" } | null =
+      null;
+    if (!isDone) next = { cursor: continueCursor, table };
+    else if (table === "loans") next = { cursor: null, table: "reports" };
+    if (next) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.migrations.backfillToolCopies,
+        next
+      );
     }
     return null;
   },

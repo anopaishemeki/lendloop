@@ -603,7 +603,108 @@ describe("listLoans filters", () => {
         toolName: undefined,
       })
     );
-    await s.t.mutation(internal.migrations.backfillLoanTools, {});
+    await s.t.mutation(internal.migrations.backfillToolCopies, {});
     expect((await loan())?.toolName).toBe("Two-person tent");
+  });
+});
+
+describe("more admin filters", () => {
+  test("reports by tool name, reason, category and status; copies follow tool edits", async () => {
+    const s = await setup();
+    const ladder = await s.owner.caller.mutation(api.tools.create, {
+      category: "other",
+      condition: "worn",
+      description: "",
+      name: "Step ladder",
+    });
+    await s.borrower.caller.mutation(api.reports.create, {
+      reason: "unsafe",
+      toolId: ladder,
+    });
+    await s.borrower.caller.mutation(api.reports.create, {
+      reason: "spam",
+      toolId: s.toolId,
+    });
+    const reports = async (filters: {
+      category?: "other" | "camping";
+      reason?: "unsafe" | "spam";
+      search?: string;
+      status?: "open" | "dismissed";
+    }) =>
+      (
+        await s.admin.caller.query(api.admin.listReports, {
+          ...filters,
+          paginationOpts: PAGE,
+        })
+      ).page.map((report) => report.toolName);
+    expect(await reports({ search: "ladder" })).toEqual(["Step ladder"]);
+    expect(await reports({ reason: "spam" })).toEqual(["Tent"]);
+    expect(await reports({ category: "other", status: "open" })).toEqual([
+      "Step ladder",
+    ]);
+    expect(await reports({ status: "dismissed" })).toEqual([]);
+
+    await s.owner.caller.mutation(api.tools.update, {
+      category: "other",
+      condition: "worn",
+      description: "",
+      name: "Folding ladder",
+      toolId: ladder,
+    });
+    expect(await reports({ search: "folding" })).toEqual(["Folding ladder"]);
+  });
+
+  test("neighbors by name and trusted lenders only", async () => {
+    const s = await setup();
+    await s.admin.caller.mutation(api.admin.setTrustedLender, {
+      trusted: true,
+      userId: s.owner.userId,
+    });
+    const names = async (filters: { search?: string; trustedOnly?: boolean }) =>
+      (
+        await s.admin.caller.query(api.admin.listUsers, {
+          ...filters,
+          paginationOpts: PAGE,
+        })
+      ).page.map((user) => user.name);
+    expect(await names({ trustedOnly: true })).toEqual(["olive"]);
+    expect(await names({ search: "ben" })).toEqual(["ben"]);
+    expect(await names({ search: "ben", trustedOnly: true })).toEqual([]);
+    expect(await names({})).toHaveLength(3);
+  });
+
+  test("notifications by email and reminders by outcome", async () => {
+    const s = await setup();
+    const loanId = await s.borrower.caller.mutation(api.loans.request, {
+      endDate: addDays(todayUtc(), 2),
+      startDate: addDays(todayUtc(), 1),
+      toolId: s.toolId,
+    });
+    await s.owner.caller.mutation(api.loans.approve, { loanId });
+    const events = async (event?: "request.created" | "request.approved") =>
+      (
+        await s.admin.caller.query(api.admin.listNotifications, {
+          event,
+          paginationOpts: PAGE,
+        })
+      ).page.map((row) => row.event);
+    expect(await events("request.approved")).toEqual(["request.approved"]);
+    expect(await events()).toHaveLength(2);
+
+    await s.t.mutation(internal.reminders.recordReminder, {
+      error: "Resend 429",
+      loanId,
+      reminderDate: todayUtc(),
+      status: "failed",
+    });
+    const reminders = async (status?: "sent" | "failed") =>
+      (
+        await s.admin.caller.query(api.admin.listReminders, {
+          paginationOpts: PAGE,
+          status,
+        })
+      ).page.length;
+    expect(await reminders("failed")).toBe(1);
+    expect(await reminders("sent")).toBe(0);
   });
 });

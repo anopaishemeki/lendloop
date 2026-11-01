@@ -24,12 +24,16 @@ import { isTrustedLender } from "./lib/users";
 import {
   categoryValidator,
   conditionValidator,
+  type DeliveryStatus,
   deliveryStatusValidator,
   LOAN_STATUSES,
   type LoanStatus,
   loanStatusValidator,
+  type NotificationEvent,
   notificationEventValidator,
   REMINDER_STATUSES,
+  type ReportReason,
+  type ReportStatus,
   reminderStatusValidator,
   reportReasonValidator,
   reportStatusValidator,
@@ -273,15 +277,42 @@ export const listTools = query({
   returns: paginationResultValidator(adminToolView),
 });
 
-/** Every neighbor, alphabetically. */
+/** Neighbors by name match, else alphabetically; optionally trusted lenders only. */
+function neighborsFiltered(
+  ctx: QueryCtx,
+  search: string | undefined,
+  trustedOnly: boolean | undefined
+) {
+  const text = search?.trim();
+  const users = ctx.db.query("users");
+  if (text) {
+    return users.withSearchIndex("search_name", (q) =>
+      trustedOnly
+        ? q.search("name", text).eq("isTrustedLender", true)
+        : q.search("name", text)
+    );
+  }
+  if (trustedOnly) {
+    return users.withIndex("by_trusted_and_name", (q) =>
+      q.eq("isTrustedLender", true)
+    );
+  }
+  return users.withIndex("by_name");
+}
+
 export const listUsers = query({
-  args: { paginationOpts: paginationOptsValidator },
-  handler: async (ctx, { paginationOpts }) => {
+  args: {
+    paginationOpts: paginationOptsValidator,
+    // Matched against the neighbor's name (best match first).
+    search: v.optional(v.string()),
+    // true: trusted lenders only.
+    trustedOnly: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { paginationOpts, search, trustedOnly }) => {
     await requireAdmin(ctx);
-    const result = await ctx.db
-      .query("users")
-      .withIndex("by_name")
-      .paginate(paginationOpts);
+    const result = await neighborsFiltered(ctx, search, trustedOnly).paginate(
+      paginationOpts
+    );
     return {
       ...result,
       page: result.page.map((user) => ({
@@ -513,18 +544,34 @@ const adminNotificationView = v.object({
 });
 
 /** Request-notification deliveries to n8n, newest first. */
+/** Outbox rows by email type and/or delivery status, through an index either way. */
+function outboxRows(
+  ctx: QueryCtx,
+  event: NotificationEvent | undefined,
+  status: DeliveryStatus | undefined
+) {
+  const outbox = ctx.db.query("notificationOutbox");
+  if (event) {
+    return outbox.withIndex("by_event_and_status", (q) =>
+      status ? q.eq("event", event).eq("status", status) : q.eq("event", event)
+    );
+  }
+  if (status) {
+    return outbox.withIndex("by_status", (q) => q.eq("status", status));
+  }
+  return outbox.fullTableScan();
+}
+
 export const listNotifications = query({
   args: {
+    // Which email (request.created, request.approved, …).
+    event: v.optional(notificationEventValidator),
     paginationOpts: paginationOptsValidator,
     status: v.optional(deliveryStatusValidator),
   },
-  handler: async (ctx, { paginationOpts, status }) => {
+  handler: async (ctx, { event, paginationOpts, status }) => {
     await requireAdmin(ctx);
-    const rows = status
-      ? ctx.db
-          .query("notificationOutbox")
-          .withIndex("by_status", (q) => q.eq("status", status))
-      : ctx.db.query("notificationOutbox");
+    const rows = outboxRows(ctx, event, status);
     const result = await rows.order("desc").paginate(paginationOpts);
     const get = cachedGet(ctx);
     return await mapPage(result, async (entry) => {
@@ -561,13 +608,18 @@ const adminReminderView = v.object({
 
 /** Overdue reminders that n8n wrote back, newest first. */
 export const listReminders = query({
-  args: { paginationOpts: paginationOptsValidator },
-  handler: async (ctx, { paginationOpts }) => {
+  args: {
+    paginationOpts: paginationOptsValidator,
+    status: v.optional(reminderStatusValidator),
+  },
+  handler: async (ctx, { paginationOpts, status }) => {
     await requireAdmin(ctx);
-    const result = await ctx.db
-      .query("reminders")
-      .order("desc")
-      .paginate(paginationOpts);
+    const rows = status
+      ? ctx.db
+          .query("reminders")
+          .withIndex("by_status", (q) => q.eq("status", status))
+      : ctx.db.query("reminders");
+    const result = await rows.order("desc").paginate(paginationOpts);
     const get = cachedGet(ctx);
     return await mapPage(result, async (reminder) => {
       const loan = await get(reminder.loanId);
@@ -598,6 +650,54 @@ export const retryFailedNotifications = mutation({
   returns: v.number(),
 });
 
+/**
+ * Reports matching the filters: a tool-name search uses the search index;
+ * otherwise status picks the index (newest first) and reason, category and
+ * condition filter that scan (reports are few, so no index per combination).
+ */
+function reportsFiltered(
+  ctx: QueryCtx,
+  {
+    category,
+    condition,
+    reason,
+    search,
+    status,
+  }: {
+    category?: ToolCategory;
+    condition?: ToolCondition;
+    reason?: ReportReason;
+    search?: string;
+    status?: ReportStatus;
+  }
+) {
+  const text = search?.trim();
+  if (text) {
+    return ctx.db.query("reports").withSearchIndex("search_tool_name", (q) => {
+      let matching = q.search("toolName", text);
+      if (status) matching = matching.eq("status", status);
+      if (reason) matching = matching.eq("reason", reason);
+      if (category) matching = matching.eq("toolCategory", category);
+      if (condition) matching = matching.eq("toolCondition", condition);
+      return matching;
+    });
+  }
+  const byStatus = status
+    ? ctx.db
+        .query("reports")
+        .withIndex("by_status", (q) => q.eq("status", status))
+        .order("desc")
+    : ctx.db.query("reports").order("desc");
+  if (!(reason || category || condition)) return byStatus;
+  return byStatus.filter((q) =>
+    q.and(
+      reason ? q.eq(q.field("reason"), reason) : true,
+      category ? q.eq(q.field("toolCategory"), category) : true,
+      condition ? q.eq(q.field("toolCondition"), condition) : true
+    )
+  );
+}
+
 const adminReportView = v.object({
   _creationTime: v.number(),
   _id: v.id("reports"),
@@ -615,17 +715,17 @@ const adminReportView = v.object({
 /** Listing reports, newest first; the queue defaults to open ones. */
 export const listReports = query({
   args: {
+    category: v.optional(categoryValidator),
+    condition: v.optional(conditionValidator),
     paginationOpts: paginationOptsValidator,
+    reason: v.optional(reportReasonValidator),
+    // Matched against the reported tool's name (best match first).
+    search: v.optional(v.string()),
     status: v.optional(reportStatusValidator),
   },
-  handler: async (ctx, { paginationOpts, status }) => {
+  handler: async (ctx, { paginationOpts, ...filters }) => {
     await requireAdmin(ctx);
-    const rows = status
-      ? ctx.db
-          .query("reports")
-          .withIndex("by_status", (q) => q.eq("status", status))
-      : ctx.db.query("reports");
-    const result = await rows.order("desc").paginate(paginationOpts);
+    const result = await reportsFiltered(ctx, filters).paginate(paginationOpts);
     const today = todayUtc();
     const get = cachedGet(ctx);
     return await mapPage(result, async (report) => {

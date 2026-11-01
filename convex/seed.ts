@@ -4,7 +4,8 @@ import type { Id, TableNames } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation } from "./functions";
 import { addDays, dayStartMs, todayUtc } from "./lib/dates";
-import { isClosedStatus, recipientOf, toolFieldsOf } from "./lib/loans";
+import { isClosedStatus, recipientOf } from "./lib/loans";
+import { toolFieldsOf } from "./lib/tools";
 import type {
   LoanStatus,
   NotificationEvent,
@@ -486,6 +487,7 @@ export const demo = internalMutation({
       reporterId: person("jonah"),
       status: "open",
       toolId: toolIds.get("tiles")!,
+      ...toolFieldsOf(toolSeeds.get("tiles")!),
     });
     await ctx.db.insert("reports", {
       details: "The tyre was flat when I picked it up.",
@@ -494,6 +496,7 @@ export const demo = internalMutation({
       resolvedAt: at(-5, 12),
       status: "dismissed",
       toolId: toolIds.get("barrow")!,
+      ...toolFieldsOf(toolSeeds.get("barrow")!),
     });
 
     return `Seeded ${NEIGHBORS.length} neighbors, ${TOOLS.length} listings and ${LOANS.length} loans.`;
