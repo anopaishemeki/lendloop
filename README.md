@@ -4,10 +4,11 @@ A neighborhood tool-lending board. Neighbors list tools they're happy to lend, r
 
 *Borrow what you need. Lend what you don't.*
 
-**Stack:** Next.js 16 (App Router), strict TypeScript, Clerk, Convex, n8n (Cloud, or self-hosted with the included `docker-compose.yml`), Resend (email through n8n).
+**Stack:** Next.js 16 (App Router), strict TypeScript, Clerk, Convex, n8n (Cloud, or self-hosted with the included `docker-compose.yml`), Resend (user email through n8n; ops alerts from Convex).
 
 ## Contents
 
+- [Requirements checklist](#requirements-checklist)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Local setup](#local-setup)
@@ -20,6 +21,33 @@ A neighborhood tool-lending board. Neighbors list tools they're happy to lend, r
 - [Running in production](#running-in-production)
 - [Project layout](#project-layout)
 - [Scripts](#scripts)
+- [Maintenance commands](#maintenance-commands)
+
+## Requirements checklist
+
+How each part of the brief is met, and where to look.
+
+| Requirement | Where |
+|---|---|
+| Public page: LendLoop name, tagline, read-only list of available tools (name and category only) from Convex, "Sign in to lend or borrow" via Clerk | `src/app/page.tsx`, `tools.listPublic` (its `returns` validator allows only `{name, category}`) |
+| Signed-in users list a tool (name, category, condition, short description) | `/tools/new`, `tools.create` |
+| Request to borrow for a date range | Request dialog on `/tools`, `loans.request` |
+| Approve or decline requests on their own tools; mark a loan returned | `/my/incoming`, `loans.approve` / `decline` / `markReturned` |
+| All tools with availability, filterable by category | `/tools`, `tools.list` |
+| My listings, My requests and Incoming requests | `/my/listings`, `/my/requests`, `/my/incoming` |
+| Roles: admin removes any listing, views all loans, marks Trusted Lenders | Admin portal (`/admin`), `convex/admin.ts`, `tools.remove` |
+| Roles: users act only on their own listings, tools and borrowing | `convex/auth.ts` guards in every function ([Roles](#roles-and-admin-provisioning)) |
+| RBAC enforced in Convex, not only in the UI | `requireViewer` / `requireAdmin` / `assert*`; the proxy redirect is only UX |
+| n8n request notification: Convex calls a webhook on create and every status change; minimal fields | Outbox + workpool (`convex/notifications.ts`), `n8n/workflows/lendloop-request-notifications.json` ([Payload minimization](#security-and-data-minimization)) |
+| n8n overdue reminders: daily schedule, Convex HTTP endpoint, reminder per borrower, status written back | `convex/http.ts`, `convex/reminders.ts`, `n8n/workflows/lendloop-overdue-reminders.json` |
+| Signed payloads, verified on the receiving side, both directions | HMAC (`convex/lib/hmac.ts`; Code nodes in n8n) ([HMAC](#security-and-data-minimization)) |
+| Secrets in env variables and n8n credentials, never in code or exported JSON | `npm run check:n8n` (in CI) ([Environment variables](#environment-variables)) |
+| Idempotent write-backs | `recordReminder` keyed on loan and day ([Write-back idempotency](#reliability-and-error-handling)) |
+| Retries and an error workflow; failures never silent | Workpool retries, n8n Retry On Fail, Error handler workflow, Convex ops alerts ([Reliability](#reliability-and-error-handling)) |
+| Bonus: recent automation activity on each loan | `loans.activity`, shown on every loan card |
+| Deliverables: repo, exported workflow JSON, README (local setup incl. docker-compose for n8n, env variables, architecture, security and data-minimization decisions), production note | This repository, `n8n/workflows/`, `docker-compose.yml`, this README, [Running in production](#running-in-production) |
+
+Beyond the brief: an admin portal with a sidebar and one page per job, listing reports, per-user rate limits, ops alerts, an outcomes chart, demo data, and end-to-end tests.
 
 ## Features
 
@@ -46,7 +74,7 @@ A neighborhood tool-lending board. Neighbors list tools they're happy to lend, r
 
 **Automation**
 - **Request notifications:** every request and status change sends an HMAC-signed event to the n8n production webhook, and n8n emails the person concerned. Emails go out as styled HTML with a plain-text version.
-- **Overdue reminders:** an hourly n8n schedule (08:00-17:00 UTC) fetches overdue loans from a signed Convex endpoint, emails each borrower and writes the outcome back to Convex. The write-back is idempotent.
+- **Overdue reminders:** a scheduled n8n workflow runs every day: first at 08:00 UTC, then hourly until 17:00 UTC. Each run fetches overdue loans from a signed Convex endpoint, emails each borrower who hasn't had today's reminder, and writes the outcome back to Convex. The write-back is idempotent, so a borrower gets at most one reminder per loan per day; the later runs only retry failures and work through a large backlog.
 - **Error workflow:** surfaces any failed run.
 - **Ops alerts:** failed request notifications and failed overdue reminders are summed up every 5 minutes and emailed to `OPS_ALERT_EMAIL` as one alert, sent by Convex through Resend directly, so it still arrives when n8n is down.
 
@@ -60,9 +88,10 @@ flowchart LR
   Clerk[(Clerk)]
   subgraph Convex
     Q[Queries / mutations<br/>RBAC via convex/auth.ts]
-    DB[(Tables: users, tools, loans,<br/>notificationOutbox, reminders)]
+    DB[(Tables: users, tools, loans, reports,<br/>notificationOutbox, reminders,<br/>pendingAlerts, usedSignatures)]
     WP[Workpool: deliver action<br/>retries + onComplete]
     HTTP[HTTP actions<br/>/n8n/overdue-loans<br/>/n8n/reminders]
+    CRON[Crons: ops alerts every 5 min,<br/>daily signature purge]
   end
   subgraph n8n [n8n Cloud or self-hosted]
     W1[Request notifications<br/>Webhook → verify HMAC → email]
@@ -85,6 +114,7 @@ flowchart LR
   W1 -. on failure .-> WE
   W2 -. on failure .-> WE
   WE --> Resend
+  CRON -- "failed deliveries/reminders: one alert" --> Resend
 ```
 
 **Data flow**
@@ -334,6 +364,7 @@ There are two roles:
 - **Emails are rendered in n8n,** as HTML plus plain text, from the minimized payload, so Convex never sends presentation or extra personal data. The shared layout lives in `n8n/snippets/` (see [`n8n/README.md`](n8n/README.md)).
 - **n8n Variables hold the settings** (with an environment-variable fallback for self-hosted installs). Code nodes can't read credentials, and the HMAC secrets must be available to the Code nodes.
 - **Each direction has its own secret,** so compromising one doesn't let an attacker forge the other direction.
+- **The reminders run every day, and repeat hourly within the day.** The brief asks for a daily run; the 08:00 UTC run is that. The hourly repeats until 17:00 add retries for failed sends and room for a backlog (200 loans a run), and never send a borrower a second reminder for the same day, because Convex skips loans already reminded today.
 - **Single-use signatures only on the overdue GET.** That's where a replay would leak data. Write-backs are idempotent, and n8n's Retry On Fail resends identical signatures, so they must stay accepted.
 
 **Errors and UI**
@@ -350,7 +381,11 @@ There are two roles:
   - signing and verification in both directions
   - replay and staleness rejection
   - idempotent write-back
-  - retry and failure handling
+  - retry and failure handling, and the batched ops alerts
+  - rate limits (bursts, refill, per-owner cap, admin exemption)
+  - listing reports (one per person, dismissal, removal closing reports)
+  - every admin filter combination, and tool edits reaching the copies on loans and reports
+  - the demo seed (consistent history, idempotent, removable)
 - the production build, lint and typecheck, in CI.
 - end to end in a browser (Playwright with `@clerk/testing`, `tests/e2e/`), against the staging Convex deployment and Clerk dev instance:
   - the public landing page, and sign-in protection on `/tools`
@@ -369,7 +404,8 @@ There are two roles:
 - request, approve, decline, cancel and return events reach n8n signed, are verified, and arrive as HTML emails; a wrong signature gets 401
 - the reminder run fetches the signed overdue list, emails once and writes back once per loan per day
 - failed runs email `OPS_ALERT_EMAIL` through the error workflow
-- the admin portal and its "Admins only" screen in a signed-in browser
+- the admin portal in a signed-in browser, and a non-admin opening `/admin` being redirected to `/tools` (Clerk session claim set)
+- the reminder schedule on n8n Cloud (hourly 08:00-17:00 UTC) and Convex's ops alert settings
 
 The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import) repeat these on a new instance.
 
@@ -380,7 +416,8 @@ The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import
 
 ## Running in production
 
-- **Convex:** run `npx convex deploy` to a production deployment and set the same env variables with `--prod`. Use a production Clerk instance and keys.
+- **Convex:** run `npx convex deploy` to a production deployment and set the same env variables with `--prod`, including the ops-alert ones (`RESEND_API_KEY`, `RESEND_FROM`, `OPS_ALERT_EMAIL`). Use a production Clerk instance and keys. On a deployment that already has data, run the migrations once (see [Maintenance commands](#maintenance-commands)).
+- **Deploy order:** keep Convex changes backward compatible (new arguments and fields optional), because Convex and the website deploy separately. A breaking change to a function's arguments or return shape is live before the website that expects it, so ship the website first or split the change.
 - **Hosting:** the app runs on Vercel (production branch `main`, a preview deployment per PR). Point a custom domain at it and update `APP_URL` in Convex to match.
 - **Email:** reminders and notifications already send from a verified Resend domain via `RESEND_FROM`; keep that domain's DNS records in place.
 - **Clerk session token:** the production Clerk instance needs the same `{"metadata": "{{user.public_metadata}}"}` session claim as the dev one (Configure → Sessions), so the proxy redirects non-admins away from `/admin` before the page loads.
@@ -409,19 +446,23 @@ The steps in [`n8n/README.md#testing-an-import`](n8n/README.md#testing-an-import
 ```
 src/
   app/                    App Router pages: "/", sign-in/up, (app)/tools and /my/*, (admin)/admin/* portal
-  components/             UI by feature (tools/, loans/, admin/) + shadcn ui/
+  components/             UI by feature (tools/, loans/, reports/, admin/) + shadcn ui/
   lib/                    client helpers (route rules, labels, dates, toasts)
   proxy.ts                Clerk middleware: protects routes, admin redirect
 convex/
   auth.ts                 shared authorization helpers (identity, roles, ownership)
   schema.ts               tables and indexes
-  tools.ts loans.ts reports.ts admin.ts users.ts   public functions
+  tools.ts loans.ts reports.ts admin.ts users.ts   public functions (admin.ts: the portal's queries and filters)
   notifications.ts        outbox delivery to n8n (workpool action + onComplete)
   alerts.ts               batched ops alert emails for failed deliveries and reminders
   reminders.ts http.ts    overdue list, idempotent write-back, signed HTTP endpoints
   seed.ts                 demo data (seed:demo / seed:removeDemo) and seed:removeE2E
   crons.ts                daily purge of used signatures, 5-minute ops alert run
-  lib/                    hmac, loans state machine, availability, dates, validators, rate limits
+  migrations.ts           one-off backfills (counters, tool copies, closedAt)
+  functions.ts            mutation wrappers that run the triggers (counters, tool copies)
+  lib/                    hmac, loans state machine (loans.ts), listing removal (listings.ts),
+                          tool copies (tools.ts), counters, alerts, rate limits (limits.ts),
+                          availability, dates, roles, validators
   *.test.ts               convex-test specs
 n8n/
   workflows/*.json        exported workflows (no credentials)
@@ -445,3 +486,20 @@ docker-compose.yml        optional local n8n
 | `npm run check:n8n` | Scan workflow exports for secrets and credential IDs |
 | `npm run sync:n8n` | Copy shared Code-node snippets (`n8n/snippets/`) into the workflow exports |
 | `npm run build` | Production build |
+
+## Maintenance commands
+
+Internal Convex functions, run from the CLI (or the Convex dashboard) against the deployment in `.env.local` (`--prod` for production):
+
+| Command | When |
+|---|---|
+| `npx convex run notifications:redriveFailed` | After an n8n outage: re-queue failed request notifications (same as **Retry failed** in the portal) |
+| `npx convex run migrations:backfillAllCounters` | Once, on a deployment with data from before the admin counters |
+| `npx convex run migrations:rebuildReminderCounts` | Once, on a deployment from before reminders were counted by outcome |
+| `npx convex run migrations:backfillToolCopies` | Once, on a deployment with loans or reports from before they copied their tool's fields |
+| `npx convex run migrations:backfillClosedAt` | Once, on a deployment with closed loans from before `closedAt` |
+| `npx convex run seed:demo` / `seed:removeDemo` | Add or remove the demo data |
+| `npx convex run seed:removeE2E` | Clear what a manual end-to-end run left on staging |
+| `npx convex run loans:setNote '{"loanId": "…", "note": "…"}'` | Correct a loan's note (there's no in-app edit) |
+
+Every migration pages through its table on its own and is safe to re-run.
