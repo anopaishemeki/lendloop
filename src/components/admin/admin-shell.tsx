@@ -94,14 +94,18 @@ export function AdminPageHeader({
   );
 }
 
+/** Leaves the portal for the regular, signed-in app (same account, same site). */
 function BackToApp() {
   return (
     <Link
-      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm"
+      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm whitespace-nowrap"
       href="/tools"
+      title="Browse, lend and borrow like any neighbor"
     >
       <ArrowLeft aria-hidden className="size-4" />
-      Back to LendLoop
+      {/* Short in the phone header, where space is tight. */}
+      <span className="sm:hidden">User view</span>
+      <span className="hidden sm:inline">Back to user view</span>
     </Link>
   );
 }
