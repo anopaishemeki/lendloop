@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
 import { Providers } from "@/components/providers";
+import { SiteAnalytics } from "@/components/site-analytics";
 import "./globals.css";
 
 const fraunces = localFont({
@@ -50,6 +51,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         >
           <Providers>{children}</Providers>
         </ClerkProvider>
+        <SiteAnalytics />
       </body>
     </html>
   );
