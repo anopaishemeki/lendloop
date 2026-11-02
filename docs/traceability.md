@@ -93,6 +93,7 @@ PR numbers refer to https://github.com/anopaishemeki/lendloop/pulls?q=is%3Amerge
 | X-15 | Maintenance commands | `notifications:redriveFailed`, migrations, `loans:setNote`, `reports:setDetails`, `seed:removeE2E` (README "Maintenance commands") | T | #24, #26, #30, #38 | ✅ |
 | X-16 | Favicon and home-screen icon | `src/app/icon.svg`, `src/app/apple-icon.png` | L | #29 | ✅ |
 | X-17 | Hosting and CI | Vercel (production on `main`, previews per PR); GitHub Actions: lint, typecheck, tests, export scan, build (CI since #1) | L | #1, #17, #21 | ✅ |
+| X-18 | Vercel Web Analytics, privacy-preserving | `src/components/site-analytics.tsx` in the root layout: cookieless page views, query strings stripped before sending | L (enabled on the Vercel project) | #40 | ✅ |
 
 ## 3. Quality, security and reliability
 
