@@ -299,6 +299,10 @@ There are two roles:
 - The request-notification workflow doesn't store successful executions.
 - Error alerts contain no payload data.
 
+**Analytics**
+- Vercel Web Analytics (`src/components/site-analytics.tsx`) counts page views without cookies and only on Vercel deployments.
+- Query strings are stripped before a page view leaves the browser, because admin filter URLs can carry search text such as a neighbor's name (`?q=…`).
+
 **Exports**
 - `npm run check:n8n` runs in CI. It fails on credential IDs, secret-looking strings, pinned data and instance IDs.
 
