@@ -374,6 +374,7 @@ There are two roles:
 **Errors and UI**
 - **`ConvexError({ code, message })`** instead of plain `Error`, which the reference project throws, so the UI can show friendly toasts.
 - **UI:** shadcn/ui (new-york), Tailwind v4, a small set of pages with server-provided action flags. There's no client-side business logic.
+- **The landing page loads neither Clerk nor Convex.** It is a static page refreshed once a minute, the proxy skips it, and its shelf comes from one server-side Convex query. Clerk and the Convex client (`AppProviders`) mount only in the signed-in app, the admin portal and the sign-in pages. A small client check of Clerk's readable `__client_uat` cookie picks "Go to the board" over "Sign in"; it only chooses a link. This halved the page's weight and removed the development instance's handshake redirect for new visitors (Lighthouse mobile Speed Index 6.2 s → 0.8 s).
 
 ## Assumptions and what is not verified end to end
 

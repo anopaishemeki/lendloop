@@ -1,26 +1,40 @@
-"use client";
-
-import { useQuery } from "convex/react";
+import { ConvexHttpClient } from "convex/browser";
 import { PackageOpen } from "lucide-react";
 import { CategoryIcon } from "@/components/category-icon";
 import { EmptyState } from "@/components/empty-state";
-import { Skeleton } from "@/components/ui/skeleton";
 import { CATEGORY_LABELS } from "@/lib/tool-labels";
 import { api } from "../../convex/_generated/api";
 
 const GRID = "grid gap-3 sm:grid-cols-2 lg:grid-cols-3";
 
-/** Read-only list for signed-out visitors: name and category only. */
-export function PublicToolList() {
-  const tools = useQuery(api.tools.listPublic);
+/**
+ * Null when Convex can't be reached (a CI build uses a placeholder URL). Not
+ * `fetchQuery` from convex/nextjs: it forces `no-store`, which would make the
+ * landing page render on every request instead of once a minute.
+ */
+async function fetchShelf() {
+  try {
+    const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+    return await convex.query(api.tools.listPublic);
+  } catch {
+    return null;
+  }
+}
 
-  if (tools === undefined) {
+/**
+ * Read-only list for signed-out visitors: name and category only. A server
+ * component, refreshed with the landing page rather than kept live.
+ */
+export async function PublicToolList() {
+  const tools = await fetchShelf();
+
+  if (tools === null) {
     return (
-      <div className={GRID}>
-        {Array.from({ length: 6 }, (_, i) => (
-          <Skeleton className="h-[4.5rem] rounded-xl" key={i} />
-        ))}
-      </div>
+      <EmptyState icon={PackageOpen} title="The shelf is out of reach">
+        <p className="text-muted-foreground text-sm">
+          Sign in to see what neighbors are lending.
+        </p>
+      </EmptyState>
     );
   }
 

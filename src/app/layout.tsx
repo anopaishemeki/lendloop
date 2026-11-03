@@ -1,10 +1,8 @@
-import { ClerkProvider } from "@clerk/nextjs";
-import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
-import { Providers } from "@/components/providers";
+import { ThemeProviders } from "@/components/providers";
 import { SiteAnalytics } from "@/components/site-analytics";
 import "./globals.css";
 
@@ -24,33 +22,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${GeistSans.variable} ${GeistMono.variable} ${fraunces.variable} font-sans`}
-      >
-        <ClerkProvider
-          appearance={{
-            // Clerk fades colorBorder itself, so it gets the opaque
-            // --border-strong (--border is translucent in dark mode).
-            variables: {
-              borderRadius: "0.75rem",
-              colorBackground: "var(--card)",
-              colorBorder: "var(--border-strong)",
-              colorDanger: "var(--destructive)",
-              colorForeground: "var(--foreground)",
-              colorInput: "var(--card)",
-              colorInputForeground: "var(--foreground)",
-              colorMuted: "var(--muted)",
-              colorMutedForeground: "var(--muted-foreground)",
-              colorNeutral: "var(--foreground)",
-              colorPrimary: "var(--primary)",
-              colorPrimaryForeground: "var(--primary-foreground)",
-              colorRing: "var(--ring)",
-              fontFamily: "var(--font-geist-sans)",
-            },
-          }}
-        >
-          <Providers>{children}</Providers>
-        </ClerkProvider>
+      <body className={`${GeistSans.variable} ${fraunces.variable} font-sans`}>
+        <ThemeProviders>{children}</ThemeProviders>
         <SiteAnalytics />
       </body>
     </html>

@@ -1,20 +1,16 @@
-import { Show, SignInButton } from "@clerk/nextjs";
 import {
-  ArrowRight,
   CalendarRange,
   HandHeart,
   PackageCheck,
   ShieldCheck,
 } from "lucide-react";
-import Link from "next/link";
-import type { ReactNode } from "react";
 import { CategoryIcon } from "@/components/category-icon";
 import { Eyebrow } from "@/components/eyebrow";
+import { HeaderSignIn, PrimaryCta } from "@/components/landing-actions";
 import { Logo } from "@/components/logo";
 import { PublicToolList } from "@/components/public-tool-list";
 import { SiteFooter } from "@/components/site-footer";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { Button } from "@/components/ui/button";
 import { CATEGORY_LABELS } from "@/lib/tool-labels";
 import { TOOL_CATEGORIES } from "../../convex/lib/validators";
 
@@ -37,45 +33,10 @@ const STEPS = [
 ];
 
 /**
- * Signing in from the landing page always lands on the board. Clerk would
- * otherwise return to "/" (the button passes the current page as redirect_url,
- * which beats the /tools fallback). Sign-ins started from a protected page keep
- * returning there, so this is forced here only, not app-wide.
+ * Static, refreshed at most once a minute, and outside the proxy: visitors get
+ * cached HTML with no Clerk redirect, script or Convex connection.
  */
-function SignInToBoard({ children }: { children: ReactNode }) {
-  return (
-    <SignInButton
-      forceRedirectUrl="/tools"
-      mode="redirect"
-      signUpForceRedirectUrl="/tools"
-    >
-      {children}
-    </SignInButton>
-  );
-}
-
-function PrimaryCta() {
-  return (
-    <>
-      <Show when="signed-out">
-        <SignInToBoard>
-          <Button className="h-12 px-6 text-base" size="lg">
-            Sign in to lend or borrow
-            <ArrowRight aria-hidden />
-          </Button>
-        </SignInToBoard>
-      </Show>
-      <Show when="signed-in">
-        <Button asChild className="h-12 px-6 text-base" size="lg">
-          <Link href="/tools">
-            Go to the board
-            <ArrowRight aria-hidden />
-          </Link>
-        </Button>
-      </Show>
-    </>
-  );
-}
+export const revalidate = 60;
 
 /** A decorative stack of category tiles beside the hero copy. */
 function HeroShelf() {
@@ -110,11 +71,7 @@ export default function HomePage() {
         <Logo />
         <div className="flex items-center gap-1">
           <ThemeSwitcher />
-          <Show when="signed-out">
-            <SignInToBoard>
-              <Button variant="ghost">Sign in</Button>
-            </SignInToBoard>
-          </Show>
+          <HeaderSignIn />
         </div>
       </header>
 
