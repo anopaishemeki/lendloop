@@ -1,12 +1,8 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
-import {
-  type NextFetchEvent,
-  type NextRequest,
-  NextResponse,
-} from "next/server";
+import { NextResponse } from "next/server";
 import { canAccessRoute, isPublicRoute } from "./lib/route-access";
 
-const withClerk = clerkMiddleware(async (auth, req) => {
+export default clerkMiddleware(async (auth, req) => {
   const { pathname } = req.nextUrl;
   if (isPublicRoute(pathname)) return;
 
@@ -22,19 +18,11 @@ const withClerk = clerkMiddleware(async (auth, req) => {
   }
 });
 
-/**
- * The landing page is static and needs no session, so it skips Clerk: on a
- * development instance, Clerk would redirect every new visitor through its
- * handshake before the page could load.
- */
-export default function proxy(req: NextRequest, event: NextFetchEvent) {
-  if (req.nextUrl.pathname === "/") return NextResponse.next();
-  return withClerk(req, event);
-}
-
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|txt|docx?|xlsx?|zip|webmanifest)).*)",
+    // `.+` leaves out "/": the static landing page needs no session, and Clerk's
+    // development instance would redirect every new visitor through a handshake.
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|txt|docx?|xlsx?|zip|webmanifest)).+)",
     "/(api|trpc)(.*)",
   ],
 };

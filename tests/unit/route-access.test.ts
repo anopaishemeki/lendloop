@@ -7,7 +7,6 @@ import {
 
 describe("isPublicRoute", () => {
   test.each([
-    ["/", true],
     ["/sign-in", true],
     ["/sign-in/factor-one", true],
     ["/sign-up", true],
