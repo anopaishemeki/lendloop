@@ -3,26 +3,11 @@
 import { ClerkProvider, useAuth } from "@clerk/nextjs";
 import { ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
-import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 
 // Next only inlines NEXT_PUBLIC_* when the full member expression is written out.
 const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
-
-/** App-wide and cheap: the theme only. */
-export function ThemeProviders({ children }: { children: ReactNode }) {
-  return (
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="system"
-      disableTransitionOnChange
-      enableSystem
-    >
-      {children}
-    </ThemeProvider>
-  );
-}
 
 /**
  * Clerk and the Convex client, for the signed-in app, the admin portal and the

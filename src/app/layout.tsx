@@ -2,8 +2,8 @@ import { GeistSans } from "geist/font/sans";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
-import { ThemeProviders } from "@/components/providers";
 import { SiteAnalytics } from "@/components/site-analytics";
+import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 const fraunces = localFont({
@@ -23,7 +23,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${GeistSans.variable} ${fraunces.variable} font-sans`}>
-        <ThemeProviders>{children}</ThemeProviders>
+        <ThemeProvider>{children}</ThemeProvider>
         <SiteAnalytics />
       </body>
     </html>
