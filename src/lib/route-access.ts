@@ -11,10 +11,8 @@ export function matchesPrefix(pathname: string, prefix: string) {
 }
 
 export function isPublicRoute(pathname: string) {
-  return (
-    pathname === "/" ||
-    PUBLIC_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix))
-  );
+  // "/" never reaches the proxy (see its matcher).
+  return PUBLIC_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix));
 }
 
 export function isAdminRoute(pathname: string) {

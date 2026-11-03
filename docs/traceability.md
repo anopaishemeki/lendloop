@@ -20,7 +20,7 @@ PR numbers refer to https://github.com/anopaishemeki/lendloop/pulls?q=is%3Amerge
 |---|---|---|---|---|---|
 | R-01 | Company name LendLoop and a short tagline | `src/app/page.tsx` ("Borrow what you need. Lend what you don't.") | E (`public.spec.ts`), M | #2, #10 | ✅ |
 | R-02 | Read-only list of available tools from Convex, name and category only, no owner details | `tools.listPublic`; its `returns` validator allows only `{name, category}` | T (`tools.test.ts`: "exposes only name and category of available, listed tools") | #2 | ✅ |
-| R-03 | "Sign in to lend or borrow" button wired to Clerk | Clerk `SignInButton` on `/`, landing on `/tools` | E ("the landing page is public and invites sign-in"), M | #2, #15 | ✅ |
+| R-03 | "Sign in to lend or borrow" button wired to Clerk | Link on `/` to `/sign-in?redirect_url=/tools`, landing on `/tools` | E ("the landing page is public and invites sign-in"), M | #2, #15 | ✅ |
 
 ### Authenticated experience
 
@@ -94,6 +94,7 @@ PR numbers refer to https://github.com/anopaishemeki/lendloop/pulls?q=is%3Amerge
 | X-16 | Favicon and home-screen icon | `src/app/icon.svg`, `src/app/apple-icon.png` | L | #29 | ✅ |
 | X-17 | Hosting and CI | Vercel (production on `main`, previews per PR); GitHub Actions: lint, typecheck, tests, export scan, build (CI since #1) | L | #1, #17, #21 | ✅ |
 | X-18 | Vercel Web Analytics, privacy-preserving | `src/components/site-analytics.tsx` in the root layout: cookieless page views, query strings stripped before sending | L (enabled on the Vercel project) | #40 | ✅ |
+| X-19 | Fast, static landing page | `/` is prerendered (refreshed every 60 s) and outside the proxy matcher; Clerk and Convex load only in the `(app)`, `(admin)` and `(auth)` layouts; `robots.txt` | L (Lighthouse: mobile 95 / desktop 100 performance) | #41 | ✅ |
 
 ## 3. Quality, security and reliability
 
