@@ -94,7 +94,7 @@ PR numbers refer to https://github.com/anopaishemeki/lendloop/pulls?q=is%3Amerge
 | X-16 | Favicon and home-screen icon | `src/app/icon.svg`, `src/app/apple-icon.png` | L | #29 | ✅ |
 | X-17 | Hosting and CI | Vercel (production on `main`, previews per PR); GitHub Actions: lint, typecheck, tests, export scan, build (CI since #1) | L | #1, #17, #21 | ✅ |
 | X-18 | Vercel Web Analytics, privacy-preserving | `src/components/site-analytics.tsx` in the root layout: cookieless page views, query strings stripped before sending | L (enabled on the Vercel project) | #40 | ✅ |
-| X-19 | Fast, static landing page | `/` is prerendered (refreshed every 60 s) and skipped by the proxy; Clerk and Convex load only on signed-in and sign-in pages; `robots.txt` | L (Lighthouse: mobile 90 / desktop 100 performance) | this PR | ✅ |
+| X-19 | Fast, static landing page | `/` is prerendered (refreshed every 60 s) and outside the proxy matcher; Clerk and Convex load only in the `(app)`, `(admin)` and `(auth)` layouts; `robots.txt` | L (Lighthouse: mobile 95 / desktop 100 performance) | this PR | ✅ |
 
 ## 3. Quality, security and reliability
 
