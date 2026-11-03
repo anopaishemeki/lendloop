@@ -8,16 +8,18 @@ import { api } from "../../convex/_generated/api";
 const GRID = "grid gap-3 sm:grid-cols-2 lg:grid-cols-3";
 
 /**
- * Null when Convex can't be reached (a CI build uses a placeholder URL). Not
- * `fetchQuery` from convex/nextjs: it forces `no-store`, which would make the
- * landing page render on every request instead of once a minute.
+ * Not `fetchQuery` from convex/nextjs: it forces `no-store`, which would make
+ * the landing page render on every request instead of once a minute. Only the
+ * build tolerates a failure (CI builds against a placeholder URL); a failed
+ * background refresh throws, so Next keeps serving the last good page.
  */
 async function fetchShelf() {
+  const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
   try {
-    const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
     return await convex.query(api.tools.listPublic);
-  } catch {
-    return null;
+  } catch (error) {
+    if (process.env.NEXT_PHASE === "phase-production-build") return null;
+    throw error;
   }
 }
 
